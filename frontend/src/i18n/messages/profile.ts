@@ -1,0 +1,92 @@
+/**
+ * Mensagens de PERFIL e CONFIGURAÇÕES (ProfilePage/SettingsPage).
+ * Genéricas (Salvar, Cancelar, Idioma…) vêm de COMMON — não duplicar.
+ */
+import { defineMessages } from '@/i18n'
+
+export const PROFILE = defineMessages({
+  // ── Foto ──────────────────────────────────────────────────────────────────
+  photoTitle: { pt: 'Foto', en: 'Photo', ko: '사진' },
+  changePhoto: { pt: 'Alterar foto', en: 'Change photo', ko: '사진 변경' },
+  uploading: { pt: 'Enviando…', en: 'Uploading…', ko: '업로드 중…' },
+  uploadingPhotoAria: { pt: 'Enviando foto', en: 'Uploading photo', ko: '사진 업로드 중' },
+  photoSaved: { pt: 'Foto salva.', en: 'Photo saved.', ko: '사진 저장 완료' },
+  photoBadType: { pt: 'Formato não suportado.', en: 'Unsupported format.', ko: '지원하지 않는 형식입니다.' },
+  photoBadTypeHint: { pt: 'Use JPG, PNG ou WEBP.', en: 'Use JPG, PNG or WEBP.', ko: 'JPG, PNG, WEBP만 가능합니다.' },
+  photoTooLarge: {
+    pt: 'Imagem acima de 5 MB ({mb} MB).',
+    en: 'Image over 5 MB ({mb} MB).',
+    ko: '5MB 초과 ({mb}MB)',
+  },
+  photoTooLargeHint: { pt: 'Escolha uma foto menor.', en: 'Choose a smaller photo.', ko: '더 작은 사진을 선택하세요.' },
+
+  // ── Dados pessoais ────────────────────────────────────────────────────────
+  dataTitle: { pt: 'Dados', en: 'Details', ko: '기본 정보' },
+  name: { pt: 'Nome', en: 'Name', ko: '이름' },
+  email: { pt: 'Email', en: 'Email', ko: '이메일' },
+  employeeId: { pt: 'Matrícula', en: 'Employee ID', ko: '사번' },
+  role: { pt: 'Cargo', en: 'Role', ko: '직책' },
+  sector: { pt: 'Setor', en: 'Sector', ko: '부문' },
+  department: { pt: 'Departamento', en: 'Department', ko: '부서' },
+  saved: { pt: 'Salvo.', en: 'Saved.', ko: '저장 완료' },
+  saving: { pt: 'Salvando…', en: 'Saving…', ko: '저장 중…' },
+  nameTooShort: { pt: 'Nome muito curto.', en: 'Name too short.', ko: '이름이 너무 짧습니다.' },
+  nameTooShortHint: { pt: 'Mínimo de 2 caracteres.', en: 'At least 2 characters.', ko: '최소 2자.' },
+
+  // ── Senha ─────────────────────────────────────────────────────────────────
+  passwordTitle: { pt: 'Senha', en: 'Password', ko: '비밀번호' },
+  currentPassword: { pt: 'Senha atual', en: 'Current password', ko: '현재 비밀번호' },
+  newPassword: { pt: 'Nova senha', en: 'New password', ko: '새 비밀번호' },
+  confirmPassword: { pt: 'Confirmar nova senha', en: 'Confirm new password', ko: '새 비밀번호 확인' },
+  changePassword: { pt: 'Alterar senha', en: 'Change password', ko: '비밀번호 변경' },
+  changing: { pt: 'Alterando…', en: 'Changing…', ko: '변경 중…' },
+  passwordChanged: { pt: 'Senha alterada.', en: 'Password changed.', ko: '비밀번호 변경 완료' },
+  showPassword: { pt: 'Mostrar senha', en: 'Show password', ko: '비밀번호 표시' },
+  hidePassword: { pt: 'Ocultar senha', en: 'Hide password', ko: '비밀번호 숨기기' },
+  strength: { pt: 'Força: {label}', en: 'Strength: {label}', ko: '강도: {label}' },
+  strengthWeak: { pt: 'Fraca', en: 'Weak', ko: '약함' },
+  strengthMedium: { pt: 'Média', en: 'Medium', ko: '보통' },
+  strengthStrong: { pt: 'Forte', en: 'Strong', ko: '강함' },
+  currentRequired: { pt: 'Informe a senha atual.', en: 'Enter your current password.', ko: '현재 비밀번호를 입력하세요.' },
+  newRequired: { pt: 'Crie uma senha nova.', en: 'Enter a new password.', ko: '새 비밀번호를 입력하세요.' },
+  newTooShort: { pt: 'Mínimo de 6 caracteres.', en: 'At least 6 characters.', ko: '최소 6자.' },
+  confirmRequired: { pt: 'Confirme a senha nova.', en: 'Confirm the new password.', ko: '새 비밀번호를 다시 입력하세요.' },
+  passwordMismatch: { pt: 'As senhas não conferem.', en: 'Passwords do not match.', ko: '비밀번호가 일치하지 않습니다.' },
+
+  // ── Configurações: preferências de escrita ────────────────────────────────
+  writingTitle: { pt: 'Preferências de escrita', en: 'Writing preferences', ko: '작성 설정' },
+  langToneHeading: { pt: 'Idioma e tom', en: 'Language & tone', ko: '언어와 톤' },
+  reportLanguage: { pt: 'Idioma do relatório', en: 'Report language', ko: '보고서 언어' },
+  langPt: { pt: 'Português', en: 'Portuguese', ko: '포르투갈어' },
+  langEn: { pt: 'Inglês', en: 'English', ko: '영어' },
+  tone: { pt: 'Tom', en: 'Tone', ko: '톤' },
+  toneAnalyst: { pt: 'Analista', en: 'Analyst', ko: '분석가' },
+  toneSpecialist: { pt: 'Especialista', en: 'Specialist', ko: '전문가' },
+  toneSupervisor: { pt: 'Supervisor', en: 'Supervisor', ko: '수퍼바이저' },
+  toneManager: { pt: 'Gerente', en: 'Manager', ko: '매니저' },
+  toneDirector: { pt: 'Diretor', en: 'Director', ko: '디렉터' },
+  objectivity: { pt: 'Objetividade', en: 'Objectivity', ko: '객관성' },
+  objectivityLow: { pt: 'Baixa', en: 'Low', ko: '낮음' },
+  objectivityMedium: { pt: 'Média', en: 'Medium', ko: '보통' },
+  objectivityHigh: { pt: 'Alta', en: 'High', ko: '높음' },
+  technicalLevel: { pt: 'Nível técnico', en: 'Technical level', ko: '기술 수준' },
+  technicalLow: { pt: 'Baixo', en: 'Low', ko: '낮음' },
+  technicalMedium: { pt: 'Médio', en: 'Medium', ko: '보통' },
+  technicalHigh: { pt: 'Alto', en: 'High', ko: '높음' },
+  selectPlaceholder: { pt: 'Selecione', en: 'Select', ko: '선택' },
+  autoHeading: { pt: 'Conteúdo automático', en: 'Auto content', ko: '자동 콘텐츠' },
+  autoConclusions: { pt: 'Conclusões', en: 'Conclusions', ko: '결론' },
+  autoNextSteps: { pt: 'Próximos passos', en: 'Next steps', ko: '다음 단계' },
+  autoImpact: { pt: 'Impacto', en: 'Impact', ko: '영향' },
+  autoDescribeImages: { pt: 'Descrever imagens', en: 'Describe images', ko: '이미지 설명' },
+  autoExplainCharts: { pt: 'Explicar gráficos', en: 'Explain charts', ko: '차트 설명' },
+  promptHeading: { pt: 'Instruções à IA', en: 'AI instructions', ko: 'AI 지침' },
+  promptPlaceholder: {
+    pt: 'Ex.: escreva em 3ª pessoa',
+    en: 'E.g., write in third person',
+    ko: '예: 3인칭으로 작성',
+  },
+  unsavedChanges: { pt: 'Alterações não salvas.', en: 'Unsaved changes.', ko: '저장되지 않은 변경 사항' },
+  allSaved: { pt: 'Tudo salvo.', en: 'All saved.', ko: '모두 저장됨' },
+  discard: { pt: 'Descartar', en: 'Discard', ko: '되돌리기' },
+})

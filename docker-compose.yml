@@ -1,0 +1,244 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: qwi_postgres
+    environment:
+      POSTGRES_USER: qwi
+      POSTGRES_PASSWORD: qwi_secret
+      POSTGRES_DB: qwi_db
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=pt_BR.UTF-8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qwi"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - qwi_network
+
+  # Redis Cache & Celery Broker
+  redis:
+    image: redis:7-alpine
+    container_name: qwi_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - qwi_network
+
+  # FastAPI Application
+  app:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: qwi_app
+    ports:
+      - "8000:8000"
+    environment:
+      # Database
+      DATABASE_URL: postgresql://qwi:qwi_secret@postgres:5432/qwi_db
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DB: 0
+      # Celery
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      # App Config
+      APP_NAME: Quality Weekly Intelligence
+      APP_VERSION: 0.1.0
+      DEBUG: "false"
+      CORS_ORIGINS: '["http://localhost:3000", "http://localhost:8000"]'
+      ENABLE_ASYNC_PROCESSING: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - backend_uploads:/app/uploads
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - qwi_network
+
+  # Celery Worker (Default Queue)
+  celery_default:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: qwi_celery_default
+    environment:
+      DATABASE_URL: postgresql://qwi:qwi_secret@postgres:5432/qwi_db
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    depends_on:
+      - postgres
+      - redis
+      - app
+    volumes:
+      - ./backend:/app
+      - backend_uploads:/app/uploads
+    command: celery -A app.celery_app worker -l info -Q default
+    networks:
+      - qwi_network
+
+  # Celery Worker (AI Tasks)
+  celery_ai:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: qwi_celery_ai
+    environment:
+      DATABASE_URL: postgresql://qwi:qwi_secret@postgres:5432/qwi_db
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      AI_WORKER_CONCURRENCY: 2
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./backend:/app
+      - backend_uploads:/app/uploads
+    command: celery -A app.celery_app worker -l info -Q ai_tasks -c 2
+    networks:
+      - qwi_network
+
+  # Celery Worker (PPTX Tasks)
+  celery_pptx:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: qwi_celery_pptx
+    environment:
+      DATABASE_URL: postgresql://qwi:qwi_secret@postgres:5432/qwi_db
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      PPTX_WORKER_CONCURRENCY: 2
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./backend:/app
+      - backend_uploads:/app/uploads
+    command: celery -A app.celery_app worker -l info -Q pptx_tasks -c 2
+    networks:
+      - qwi_network
+
+  # Celery Worker (Notifications)
+  celery_notifications:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: qwi_celery_notifications
+    environment:
+      DATABASE_URL: postgresql://qwi:qwi_secret@postgres:5432/qwi_db
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      NOTIFICATION_WORKER_CONCURRENCY: 4
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./backend:/app
+    command: celery -A app.celery_app worker -l info -Q notifications -c 4
+    networks:
+      - qwi_network
+
+  # Celery Flower (Monitoring Dashboard)
+  flower:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: qwi_flower
+    ports:
+      - "5555:5555"
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    depends_on:
+      - redis
+    volumes:
+      - ./backend:/app
+    command: celery -A app.celery_app flower --port 5555 --broker redis://redis:6379/1
+    networks:
+      - qwi_network
+
+  # Optional: Frontend (React)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: qwi_frontend
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_API_URL: http://localhost:8000/api
+    depends_on:
+      - app
+    networks:
+      - qwi_network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  backend_uploads:
+    driver: local
+
+networks:
+  qwi_network:
+    driver: bridge
+
+# Usage:
+#
+# Start all services:
+#   docker-compose up -d
+#
+# View logs:
+#   docker-compose logs -f app
+#   docker-compose logs -f celery_default
+#   docker-compose logs -f redis
+#
+# Monitor tasks:
+#   http://localhost:5555 (Flower dashboard)
+#
+# Access API:
+#   http://localhost:8000/api/health
+#   http://localhost:8000/api/docs (OpenAPI)
+#
+# Access frontend:
+#   http://localhost:3000
+#
+# Stop all services:
+#   docker-compose down
+#
+# Remove volumes (clean database):
+#   docker-compose down -v

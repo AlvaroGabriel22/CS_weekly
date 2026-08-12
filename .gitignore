@@ -1,0 +1,8 @@
+# Banco de desenvolvimento e arquivos enviados — nunca versionar
+backend/qwi_dev.db
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# Artefatos de build
+frontend/tsconfig.tsbuildinfo
+frontend/dist/
