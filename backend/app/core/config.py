@@ -16,6 +16,23 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7
 
+    # ── Provedor de LLM ────────────────────────────────────────────────────
+    # "ollama" (local, padrão) ou "openai_compat" (API externa compatível com
+    # OpenAI — chat/completions). Para trocar, basta o .env:
+    #   LLM_PROVIDER=openai_compat
+    #   LLM_BASE_URL=https://sua-api/v1
+    #   LLM_API_KEY=...            (se a API exigir)
+    #   LLM_MODEL=gpt-4o
+    # Tudo (tradução, copiloto do gestor, deck em um clique…) passa a usar a
+    # API automaticamente, com fila de LLM_RATE_LIMIT_PER_MIN requisições/min
+    # e fallback para o Ollama local quando a API estiver indisponível.
+    LLM_PROVIDER: str = "ollama"
+    LLM_BASE_URL: str = ""
+    LLM_API_KEY: str = ""
+    LLM_MODEL: str = ""
+    LLM_RATE_LIMIT_PER_MIN: int = 3
+    LLM_FALLBACK_TO_OLLAMA: bool = True
+
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "gemma4:e2b"
     # Context window for Ollama. The default (4096) truncates the weekly

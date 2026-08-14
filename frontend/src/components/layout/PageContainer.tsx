@@ -17,7 +17,7 @@ export interface PageContainerProps {
   description?: string
   /** Botões/ações alinhados à direita do título. */
   actions?: ReactNode
-  /** Largura máxima do conteúdo (padrão: 6xl). */
+  /** Largura máxima do conteúdo (padrão: 7xl). */
   maxWidth?: PageMaxWidth
   className?: string
   children: ReactNode
@@ -28,7 +28,7 @@ export function PageContainer({
   title,
   description,
   actions,
-  maxWidth = '6xl',
+  maxWidth = '7xl',
   className,
   children,
 }: PageContainerProps) {

@@ -104,11 +104,178 @@ class OllamaProvider(LLMProvider):
             return False
 
 
+class OpenAICompatProvider(LLMProvider):
+    """API externa compatível com OpenAI (POST {base}/chat/completions).
+
+    Suporta imagens (multimodal, content parts com data URL) e json_mode
+    (response_format). Configurada via LLM_BASE_URL / LLM_API_KEY / LLM_MODEL.
+    """
+
+    def __init__(
+        self,
+        base_url: str | None = None,
+        api_key: str | None = None,
+        model: str | None = None,
+    ):
+        self.base_url = (base_url or settings.LLM_BASE_URL).rstrip("/")
+        self.api_key = api_key or settings.LLM_API_KEY
+        self.model = model or settings.LLM_MODEL or "gpt-4o"
+
+    def _headers(self) -> dict:
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        return headers
+
+    async def generate(
+        self,
+        prompt: str,
+        system_prompt: str | None = None,
+        images: list[str] | None = None,
+        json_mode: bool = False,
+    ) -> LLMResponse:
+        messages: list[dict] = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        if images:
+            # Multimodal: texto + imagens como data URLs (base64, mesmo formato
+            # que o Ollama recebe — aqui embrulhado no content-parts da OpenAI).
+            parts: list[dict] = [{"type": "text", "text": prompt}]
+            for image_b64 in images:
+                parts.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"},
+                })
+            messages.append({"role": "user", "content": parts})
+        else:
+            messages.append({"role": "user", "content": prompt})
+
+        payload: dict = {"model": self.model, "messages": messages}
+        if json_mode:
+            payload["response_format"] = {"type": "json_object"}
+
+        async with httpx.AsyncClient(timeout=300.0) as client:
+            response = await client.post(
+                f"{self.base_url}/chat/completions",
+                json=payload,
+                headers=self._headers(),
+            )
+            response.raise_for_status()
+            data = response.json()
+
+        choice = (data.get("choices") or [{}])[0]
+        content = (choice.get("message") or {}).get("content", "") or ""
+        usage = data.get("usage") or {}
+        logger.info(
+            "LLM response generated | provider=openai_compat | model=%s | length=%d",
+            self.model, len(content),
+        )
+        return LLMResponse(
+            content=content,
+            model=data.get("model", self.model),
+            tokens_used=usage.get("total_tokens"),
+            finish_reason=choice.get("finish_reason"),
+        )
+
+    async def is_available(self) -> bool:
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                response = await client.get(
+                    f"{self.base_url}/models", headers=self._headers()
+                )
+                return response.status_code == 200
+        except Exception:
+            return False
+
+
+class RateLimitedProvider(LLMProvider):
+    """Fila GLOBAL com janela deslizante: no máximo N requisições por minuto.
+
+    As chamadas são serializadas — quem chega espera a vez em vez de estourar
+    o limite da API (ex.: 3/min). Compartilhada por todo o backend.
+    """
+
+    def __init__(self, inner: LLMProvider, per_minute: int):
+        import asyncio
+        from collections import deque
+
+        self.inner = inner
+        self.per_minute = max(1, per_minute)
+        self._lock = asyncio.Lock()
+        self._recent: deque[float] = deque()
+
+    async def _wait_turn(self) -> None:
+        import asyncio
+        import time
+
+        async with self._lock:
+            now = time.monotonic()
+            while self._recent and now - self._recent[0] > 60.0:
+                self._recent.popleft()
+            if len(self._recent) >= self.per_minute:
+                wait = 60.0 - (now - self._recent[0]) + 0.05
+                logger.info("LLM rate limit | aguardando %.1fs na fila", wait)
+                await asyncio.sleep(wait)
+                now = time.monotonic()
+                while self._recent and now - self._recent[0] > 60.0:
+                    self._recent.popleft()
+            self._recent.append(time.monotonic())
+
+    async def generate(self, prompt, system_prompt=None, images=None, json_mode=False) -> LLMResponse:
+        await self._wait_turn()
+        return await self.inner.generate(prompt, system_prompt, images, json_mode)
+
+    async def is_available(self) -> bool:
+        return await self.inner.is_available()
+
+
+class FallbackProvider(LLMProvider):
+    """Tenta o provedor primário; se indisponível/falhar, cai para o reserva."""
+
+    def __init__(self, primary: LLMProvider, fallback: LLMProvider):
+        self.primary = primary
+        self.fallback = fallback
+
+    async def generate(self, prompt, system_prompt=None, images=None, json_mode=False) -> LLMResponse:
+        try:
+            return await self.primary.generate(prompt, system_prompt, images, json_mode)
+        except Exception as error:
+            logger.warning("LLM primário falhou (%s) — usando fallback local", error)
+            return await self.fallback.generate(prompt, system_prompt, images, json_mode)
+
+    async def is_available(self) -> bool:
+        return await self.primary.is_available() or await self.fallback.is_available()
+
+
+_default_provider: LLMProvider | None = None
+
+
+def default_provider() -> LLMProvider:
+    """Provedor global montado a partir do .env (singleton — a fila de rate
+    limit precisa ser compartilhada por todas as instâncias de LLMService)."""
+    global _default_provider
+    if _default_provider is None:
+        if settings.LLM_PROVIDER == "openai_compat" and settings.LLM_BASE_URL:
+            provider: LLMProvider = OpenAICompatProvider()
+            provider = RateLimitedProvider(provider, settings.LLM_RATE_LIMIT_PER_MIN)
+            if settings.LLM_FALLBACK_TO_OLLAMA:
+                provider = FallbackProvider(provider, OllamaProvider())
+            logger.info(
+                "LLM: openai_compat (%s @ %s), fila %d/min, fallback=%s",
+                settings.LLM_MODEL, settings.LLM_BASE_URL,
+                settings.LLM_RATE_LIMIT_PER_MIN, settings.LLM_FALLBACK_TO_OLLAMA,
+            )
+        else:
+            provider = OllamaProvider()
+        _default_provider = provider
+    return _default_provider
+
+
 class LLMService:
     """Abstraction layer for all LLM communication. Swap providers without touching business logic."""
 
     def __init__(self, provider: LLMProvider | None = None):
-        self._provider = provider or OllamaProvider()
+        self._provider = provider or default_provider()
 
     @property
     def provider(self) -> LLMProvider:

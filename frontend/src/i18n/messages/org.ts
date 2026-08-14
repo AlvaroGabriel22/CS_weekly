@@ -54,4 +54,21 @@ export const ORG = defineMessages({
   prevSlide: { pt: 'Slide anterior', en: 'Previous slide', ko: '이전 슬라이드' },
   nextSlide: { pt: 'Próximo slide', en: 'Next slide', ko: '다음 슬라이드' },
   keysHint: { pt: '← → navegar · Esc fechar', en: '← → navigate · Esc close', ko: '← → 이동 · Esc 닫기' },
+
+  // Copiloto do gestor (IA)
+  rollupBtn: { pt: 'Resumo da semana (IA)', en: 'Week summary (AI)', ko: '주간 요약 (AI)' },
+  rollupTitle: { pt: 'Weekly do departamento', en: 'Department weekly', ko: '부서 위클리' },
+  rollupGenerate: { pt: 'Gerar resumo', en: 'Generate summary', ko: '요약 생성' },
+  rollupRegenerate: { pt: 'Regenerar', en: 'Regenerate', ko: '다시 생성' },
+  rollupGenerating: { pt: 'Analisando a semana…', en: 'Analyzing the week…', ko: '주간 분석 중…' },
+  rollupGeneratingHint: { pt: 'Pode levar alguns minutos.', en: 'May take a few minutes.', ko: '몇 분 걸릴 수 있음.' },
+  rollupEmpty: { pt: 'Ainda sem resumo', en: 'No summary yet', ko: '요약 없음' },
+  rollupHighlights: { pt: 'Destaques', en: 'Highlights', ko: '하이라이트' },
+  rollupKpis: { pt: 'KPIs', en: 'KPIs', ko: 'KPI' },
+  rollupRisks: { pt: 'Riscos', en: 'Risks', ko: '리스크' },
+  rollupTeam: { pt: 'Por pessoa', en: 'By person', ko: '구성원별' },
+  rollupNextSteps: { pt: 'Próximos passos', en: 'Next steps', ko: '다음 단계' },
+  rollupHasWeekly: { pt: 'Weekly entregue', en: 'Weekly delivered', ko: '위클리 제출' },
+  rollupNoWeekly: { pt: 'Sem weekly', en: 'No weekly', ko: '위클리 없음' },
+  rollupGeneratedAt: { pt: 'Gerado em {date}', en: 'Generated {date}', ko: '{date} 생성' },
 })

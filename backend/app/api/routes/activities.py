@@ -237,14 +237,23 @@ def get_attachment_file(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Serve o arquivo do anexo (preview de imagens no editor de montagem)."""
+    """Serve o arquivo do anexo.
+
+    Acesso: o DONO da atividade e colegas que podem ver os weeklys do dono
+    (mesma regra do organograma) — necessário para a pré-visualização do PPT.
+    """
+    from app.api.routes.users import can_view_user_weeklys
+
     attachment = (
         db.query(Attachment)
         .options(joinedload(Attachment.activity))
         .filter(Attachment.id == attachment_id)
         .first()
     )
-    if not attachment or attachment.activity.user_id != current_user.id:
+    if not attachment:
+        raise NotFoundError("Attachment")
+    owner = db.query(User).filter(User.id == attachment.activity.user_id).first()
+    if not owner or not can_view_user_weeklys(current_user, owner):
         raise NotFoundError("Attachment")
     path = Path(attachment.file_path)
     if not path.exists():

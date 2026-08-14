@@ -303,7 +303,7 @@ export function SettingsPage() {
   }
 
   return (
-    <PageContainer title={t(COMMON.settings)} maxWidth="3xl">
+    <PageContainer title={t(COMMON.settings)} maxWidth="4xl">
       <div className="space-y-6">
         {/* ── Card: idioma da interface (client-side, via useI18n) ────────── */}
         <Card className="animate-fade-in">

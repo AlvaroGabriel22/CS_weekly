@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useToast } from '@/components/ui/toast'
-import { SlideViewer } from '@/components/weekly/SlideViewer'
+import { DeckViewer, SlideViewer } from '@/components/weekly/SlideViewer'
 import { downloadWeeklyPptx, useColleagueWeeklys, useOrgUsers, useWeeklyReportFull } from '@/hooks/useOrg'
 import { currentWeekRef, getWeekDaysOf, weekLabel, weeksInYear, type WeekRef } from '@/lib/dates'
 import { parseApiError } from '@/lib/errors'
@@ -240,6 +240,12 @@ export function ColleagueWeeklysPage() {
     )
   }
 
+  const fullReport =
+    viewReportId && reportQuery.data && reportQuery.data.id === viewReportId
+      ? reportQuery.data
+      : null
+  const deckLayout = fullReport?.content?.layout ?? null
+
   const chipBase =
     'h-9 shrink-0 rounded-full border px-3.5 text-xs font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
 
@@ -397,10 +403,18 @@ export function ColleagueWeeklysPage() {
         </div>
       )}
 
-      {/* Apresentação em tela cheia */}
-      {viewReportId && reportQuery.data && reportQuery.data.id === viewReportId && (
-        <SlideViewer report={reportQuery.data} open onClose={() => setViewReportId(null)} />
-      )}
+      {/* Apresentação em tela cheia: layout do PPT quando existir; senão, fallback */}
+      {fullReport &&
+        (deckLayout && deckLayout.slides.length > 0 ? (
+          <DeckViewer
+            report={fullReport}
+            layout={deckLayout}
+            open
+            onClose={() => setViewReportId(null)}
+          />
+        ) : (
+          <SlideViewer report={fullReport} open onClose={() => setViewReportId(null)} />
+        ))}
     </div>
   )
 }

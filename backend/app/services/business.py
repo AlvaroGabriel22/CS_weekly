@@ -635,6 +635,21 @@ class WeeklyService:
                     )
                     attachment_map.update({att.id: _attachment_info(att) for att in extra})
 
+                # Embute os dados das tabelas no layout salvo: a pré-visualização
+                # (inclusive por colegas) renderiza sem depender dos anexos.
+                for slide_def in layout.get("slides", []):
+                    if not isinstance(slide_def, dict):
+                        continue
+                    for el in slide_def.get("elements", []):
+                        if (
+                            isinstance(el, dict)
+                            and el.get("type") == "table"
+                            and el.get("attachment_id") in attachment_map
+                        ):
+                            table = attachment_map[el["attachment_id"]].get("table")
+                            if table:
+                                el["table"] = table
+
                 renderer = PptxLayoutRenderer(
                     Path(get_settings().UPLOAD_DIR) / "reports"
                 )

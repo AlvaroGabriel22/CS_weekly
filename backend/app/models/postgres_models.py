@@ -363,3 +363,29 @@ class SlideLayoutPref(Base):
         default=lambda: datetime.now(UTC),
         onupdate=lambda: datetime.now(UTC),
     )
+
+
+class DepartmentRollup(Base):
+    """Cache do 'weekly do departamento' gerado pela IA (copiloto do gestor).
+
+    Uma linha por setor+semana; regenerar substitui. Evita repetir chamadas
+    caras ao LLM (importante com APIs limitadas a poucas req/min).
+    """
+    __tablename__ = "department_rollups"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    sector: Mapped[str] = mapped_column(String(20), nullable=False)
+    year: Mapped[int] = mapped_column(Integer, nullable=False)
+    week_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    content: Mapped[dict] = mapped_column(JSON, nullable=False)
+    model: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    generated_by: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    generated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+    __table_args__ = (
+        UniqueConstraint("sector", "year", "week_number", name="uq_rollup_sector_week"),
+    )

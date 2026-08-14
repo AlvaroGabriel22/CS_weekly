@@ -201,8 +201,14 @@ export function ProfilePage() {
         setPhotoError(null)
       },
       onError: (err) => {
+        // Qualquer falha (422/413/500/rede) vira mensagem visível junto ao
+        // controle da foto. O campo do multipart no backend é "file".
         const parsed = parseApiError(err)
-        const fieldError = parsed.fields.photo ?? { message: parsed.message }
+        const fieldError =
+          parsed.fields.photo ??
+          parsed.fields.file ??
+          Object.values(parsed.fields)[0] ??
+          { message: parsed.message }
         setPhotoError(fieldError)
         toast.error(fieldError.message)
       },
@@ -319,7 +325,7 @@ export function ProfilePage() {
   const strength = pw.new_password ? passwordStrength(pw.new_password) : null
 
   return (
-    <PageContainer title={t(COMMON.profile)} maxWidth="3xl">
+    <PageContainer title={t(COMMON.profile)} maxWidth="4xl">
       <div className="space-y-6">
         {/* ── Card: foto ─────────────────────────────────────────────────── */}
         <Card className="animate-fade-in">

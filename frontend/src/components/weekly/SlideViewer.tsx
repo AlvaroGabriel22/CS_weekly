@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { StaticSlidePage } from '@/components/reports/SlideStatic'
+import type { DeckLayout } from '@/components/reports/slideLayout'
 import { parseIsoDate, weekLabel } from '@/lib/dates'
 import { useI18n } from '@/i18n'
 import { COMMON } from '@/i18n/messages/common'
@@ -365,6 +367,158 @@ export function SlideViewer({ report, open, onClose }: SlideViewerProps) {
       <div className="flex flex-col items-center gap-1 px-4 py-3 sm:py-4">
         <p className="text-sm font-medium tabular-nums text-white/90" aria-live="polite">
           {index + 1} / {total}
+        </p>
+        <p className="hidden text-xs text-white/40 sm:block">{t(ORG.keysHint)}</p>
+      </div>
+    </div>
+  )
+}
+
+// ── Visualizador do layout do PPT (páginas do editor, fiéis ao arquivo) ─────
+
+/** Largura da página: ~min(90vw, altura útil·16/9), com folga p/ setas no desktop. */
+function deckStageWidth(): number {
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  const maxByGutters = vw >= 640 ? vw - 136 : vw * 0.92 // folga p/ setas no desktop
+  return Math.max(240, Math.min(vw * 0.9, maxByGutters, ((vh - 128) * 16) / 9))
+}
+
+export interface DeckViewerProps {
+  report: WeeklyReport
+  layout: DeckLayout
+  open: boolean
+  onClose: () => void
+}
+
+/**
+ * Pré-visualização em tela cheia do PPT montado no editor: renderiza as
+ * páginas 16:9 do layout salvo (StaticSlidePage), uma a uma, com setas,
+ * teclado (← → Esc), contador e foco preso no diálogo.
+ */
+export function DeckViewer({ report, layout, open, onClose }: DeckViewerProps) {
+  const { t } = useI18n()
+  const slides = layout.slides ?? []
+  const total = slides.length
+  const [index, setIndex] = useState(0)
+  const [width, setWidth] = useState(() => deckStageWidth())
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  const goPrev = useCallback(() => setIndex(i => Math.max(0, i - 1)), [])
+  const goNext = useCallback(() => setIndex(i => Math.min(total - 1, i + 1)), [total])
+
+  // Reabrir (ou trocar de relatório) sempre volta à primeira página.
+  useEffect(() => {
+    if (open) setIndex(0)
+  }, [open, report.id])
+
+  useEffect(() => {
+    if (!open) return
+    const onResize = () => setWidth(deckStageWidth())
+    onResize()
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [open])
+
+  // Teclado (setas + Esc), foco preso simples (Tab) e trava do scroll da página.
+  useEffect(() => {
+    if (!open) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight') goNext()
+      else if (e.key === 'ArrowLeft') goPrev()
+      else if (e.key === 'Escape') onClose()
+      else if (e.key === 'Tab') {
+        const focusables = containerRef.current?.querySelectorAll<HTMLElement>('button:not([disabled])')
+        if (!focusables || focusables.length === 0) return
+        const first = focusables[0]
+        const last = focusables[focusables.length - 1]
+        const active = document.activeElement
+        if (!containerRef.current?.contains(active)) {
+          e.preventDefault()
+          first.focus()
+        } else if (e.shiftKey && active === first) {
+          e.preventDefault()
+          last.focus()
+        } else if (!e.shiftKey && active === last) {
+          e.preventDefault()
+          first.focus()
+        }
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    containerRef.current?.focus()
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      document.body.style.overflow = previousOverflow
+    }
+  }, [open, goNext, goPrev, onClose])
+
+  if (!open || total === 0) return null
+
+  const safeIndex = Math.min(index, total - 1)
+  const slide = slides[safeIndex]
+  const arrowClass =
+    'absolute top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-white/80 backdrop-blur-sm transition-all hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 disabled:pointer-events-none disabled:opacity-30'
+
+  return (
+    <div
+      ref={containerRef}
+      tabIndex={-1}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${t(ORG.presentation)} · ${weekLabel({ year: report.year, week: report.week_number })} ${report.year}`}
+      className="fixed inset-0 z-[90] flex flex-col bg-gray-950/95 outline-none animate-fade-in"
+    >
+      {/* Barra superior */}
+      <div className="flex items-center justify-between gap-3 px-4 py-3 sm:px-6">
+        <p className="min-w-0 truncate text-sm font-medium text-white/80">
+          {asString(report.title) ?? 'Weekly'} · {weekLabel({ year: report.year, week: report.week_number })}{' '}
+          {report.year}
+        </p>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={t(COMMON.close)}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white/80 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+        >
+          <X className="h-5 w-5" aria-hidden="true" />
+        </button>
+      </div>
+
+      {/* Palco: página centrada + setas sobrepostas */}
+      <div className="relative flex min-h-0 flex-1 items-center justify-center px-2 sm:px-6">
+        <button
+          type="button"
+          onClick={goPrev}
+          disabled={safeIndex === 0}
+          aria-label={t(ORG.prevSlide)}
+          className={cn(arrowClass, 'left-1.5 sm:left-4')}
+        >
+          <ChevronLeft className="h-6 w-6" aria-hidden="true" />
+        </button>
+
+        {/* key = índice remonta a página → fade curto a cada troca */}
+        <div key={safeIndex} className="max-w-full animate-fade-in">
+          <StaticSlidePage slide={slide} width={width} className="shadow-2xl" />
+        </div>
+
+        <button
+          type="button"
+          onClick={goNext}
+          disabled={safeIndex === total - 1}
+          aria-label={t(ORG.nextSlide)}
+          className={cn(arrowClass, 'right-1.5 sm:right-4')}
+        >
+          <ChevronRight className="h-6 w-6" aria-hidden="true" />
+        </button>
+      </div>
+
+      {/* Rodapé: contador + dica */}
+      <div className="flex flex-col items-center gap-1 px-4 py-3 sm:py-4">
+        <p className="text-sm font-medium tabular-nums text-white/90" aria-live="polite">
+          {safeIndex + 1} / {total}
         </p>
         <p className="hidden text-xs text-white/40 sm:block">{t(ORG.keysHint)}</p>
       </div>

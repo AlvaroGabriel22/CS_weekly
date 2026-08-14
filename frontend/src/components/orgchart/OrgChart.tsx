@@ -83,10 +83,12 @@ export function OrgChart({ users, onPersonClick }: OrgChartProps) {
 
   if (levels.length === 0) return null
 
+  // Árvores largas rolam dentro do próprio bloco — a página nunca rola na
+  // horizontal. pt-3/-mt-3: o overflow-x-auto também clipa na vertical; sem o
+  // respiro, o hover (-translate-y-1 + sombra) da primeira fileira é cortado.
   return (
-    // Árvores largas rolam dentro do próprio bloco — a página nunca rola na horizontal.
-    <div className="overflow-x-auto pb-4">
-      <div className="mx-auto min-w-max px-2">
+    <div className="-mt-3 overflow-x-auto pb-4 pt-3">
+      <div className="mx-auto min-w-max px-3">
         {levels.map((level, levelIdx) => {
           const hasParent = levelIdx > 0
           const many = level.people.length > 1

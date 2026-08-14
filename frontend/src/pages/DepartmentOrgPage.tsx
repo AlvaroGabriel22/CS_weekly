@@ -1,9 +1,11 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { UsersRound } from 'lucide-react'
+import { Sparkles, UsersRound } from 'lucide-react'
+import { useAuth } from '@/contexts/AuthContext'
 import { EmptyState, ErrorState } from '@/components/feedback'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { OrgChart } from '@/components/orgchart/OrgChart'
+import { DepartmentRollupPanel } from '@/components/orgchart/DepartmentRollupPanel'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useToast } from '@/components/ui/toast'
@@ -11,7 +13,7 @@ import { useOrgUsers } from '@/hooks/useOrg'
 import { useI18n } from '@/i18n'
 import { COMMON } from '@/i18n/messages/common'
 import { ORG } from '@/i18n/messages/org'
-import type { OrgUser } from '@/types'
+import { isManagementRole, type OrgUser } from '@/types'
 
 const SECTOR_NAMES: Record<OrgUser['sector'], string> = {
   QM: 'Quality Management',
@@ -19,7 +21,7 @@ const SECTOR_NAMES: Record<OrgUser['sector'], string> = {
   OQC: 'Outgoing Quality Control',
   IQC: 'Incoming Quality Control',
   FIELD: 'Field Quality',
-  CSI: 'Customer Satisfaction Index',
+  CSI: 'CS Innovation',
 }
 
 function isSectorCode(value: string): value is OrgUser['sector'] {
@@ -58,6 +60,10 @@ export function DepartmentOrgPage() {
   const { t } = useI18n()
   const { toast } = useToast()
   const { data: orgUsers, isLoading, isError, error, refetch } = useOrgUsers()
+  const { user } = useAuth()
+  const [rollupOpen, setRollupOpen] = useState(false)
+  // Copiloto do gestor: opcional e visível só para a gestão (backend revalida).
+  const canRollup = isManagementRole(user?.role)
 
   const sector = (sectorParam ?? '').toUpperCase()
   const validSector = isSectorCode(sector) ? sector : null
@@ -69,7 +75,7 @@ export function DepartmentOrgPage() {
 
   if (!validSector) {
     return (
-      <PageContainer title={t(COMMON.departments)} maxWidth="6xl">
+      <PageContainer title={t(COMMON.departments)}>
         <EmptyState
           title={t(ORG.sectorNotFound)}
           action={<Button onClick={() => navigate('/departamentos')}>{t(ORG.seeDepartments)}</Button>}
@@ -80,14 +86,26 @@ export function DepartmentOrgPage() {
 
   const handlePersonClick = (person: OrgUser) => {
     if (person.viewer_can_access) {
-      navigate(`/colegas/${person.id}`)
+      // O setor vai no state para o "Voltar" da topbar retornar ao organograma certo.
+      navigate(`/colegas/${person.id}`, { state: { sector: validSector } })
     } else {
       toast.info(t(COMMON.noAccess))
     }
   }
 
   return (
-    <PageContainer title={`${validSector} · ${SECTOR_NAMES[validSector]}`} maxWidth="7xl">
+    <PageContainer
+      title={`${validSector} · ${SECTOR_NAMES[validSector]}`}
+      maxWidth="7xl"
+      actions={
+        canRollup ? (
+          <Button variant="outline" onClick={() => setRollupOpen(true)}>
+            <Sparkles aria-hidden />
+            {t(ORG.rollupBtn)}
+          </Button>
+        ) : undefined
+      }
+    >
       {isLoading ? (
         <OrgSkeleton />
       ) : isError ? (
@@ -104,6 +122,14 @@ export function DepartmentOrgPage() {
         />
       ) : (
         <OrgChart users={sectorUsers} onPersonClick={handlePersonClick} />
+      )}
+
+      {canRollup && (
+        <DepartmentRollupPanel
+          sector={validSector}
+          open={rollupOpen}
+          onClose={() => setRollupOpen(false)}
+        />
       )}
     </PageContainer>
   )

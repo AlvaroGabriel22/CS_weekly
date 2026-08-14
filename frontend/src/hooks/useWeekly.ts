@@ -13,7 +13,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
-import type { WeekRef } from '@/lib/dates'
+import { formatDateIso, getWeekDaysOf, type WeekRef } from '@/lib/dates'
 import type { Activity, Template, WeeklyReport } from '@/types'
 
 import type { DeckLayout } from '@/components/reports/slideLayout'
@@ -56,8 +56,16 @@ export function useWeekActivities(ref: WeekRef) {
   return useQuery<Activity[]>({
     queryKey: ['activities-week', ref.year, ref.week],
     queryFn: async () => {
+      // Filtra pelo INTERVALO DE DATAS da semana (seg→dom) — mesma fonte de
+      // verdade da Agenda. Nunca depende do week_number gravado na criação,
+      // então TODA atividade da semana aparece na montagem do PPT.
+      const days = getWeekDaysOf(ref)
       const response = await api.get<ActivityListResponse>('/activities', {
-        params: { week_number: ref.week, year: ref.year, page_size: 200 },
+        params: {
+          start_date: formatDateIso(days[0]),
+          end_date: formatDateIso(days[6]),
+          page_size: 200,
+        },
       })
       return response.data.items
     },

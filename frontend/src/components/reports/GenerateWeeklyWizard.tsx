@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Download,
   History,
+  Loader2,
   Paperclip,
   Sparkles,
 } from 'lucide-react'
@@ -18,11 +19,19 @@ import { currentWeekRef, parseIsoDate, weekLabel, weekRangeLabel, type WeekRef }
 import { parseApiError } from '@/lib/errors'
 import { EmptyState, ErrorState } from '@/components/feedback'
 import { Button } from '@/components/ui/button'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useToast } from '@/components/ui/toast'
-import { downloadWeeklyPptx, useGenerateWeekly, useTemplates, useWeekActivities } from '@/hooks/useWeekly'
+import { downloadWeeklyPptx, useGenerateWeekly, useWeekActivities } from '@/hooks/useWeekly'
 import { useSaveSlideLayoutPrefs, useSlideLayoutPrefs } from '@/hooks/useSlideEditor'
+import { useDeckDraft } from '@/hooks/useAi'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { SlideEditor } from './SlideEditor'
 import { StepIndicator } from './StepIndicator'
 import { WeekPicker } from './WeekPicker'
@@ -46,16 +55,14 @@ export function GenerateWeeklyWizard({ initialWeek, onViewHistory }: GenerateWee
   const [step, setStep] = useState(0)
   const [selectedOrder, setSelectedOrder] = useState<string[] | null>(null)
   const [deck, setDeck] = useState<DeckLayout | null>(null)
-  const [templateChoice, setTemplateChoice] = useState<string | null>(null)
-  const [language, setLanguage] = useState<'pt' | 'en'>(
-    user?.writing_profile?.default_language === 'en' ? 'en' : 'pt'
-  )
+  // Idioma do registro do relatório (a UI de template/idioma saiu do MVP —
+  // o conteúdo é 100% montado pelo usuário e traduzível pelo botão Traduzir).
+  const language: 'pt' | 'en' = user?.writing_profile?.default_language === 'en' ? 'en' : 'pt'
   const [successReport, setSuccessReport] = useState<WeeklyReport | null>(null)
   const [downloading, setDownloading] = useState(false)
   const [messageIndex, setMessageIndex] = useState(0)
 
   const activitiesQuery = useWeekActivities(week)
-  const templatesQuery = useTemplates()
   const generateMutation = useGenerateWeekly()
   const prefsQuery = useSlideLayoutPrefs()
   const savePrefs = useSaveSlideLayoutPrefs()
@@ -117,18 +124,6 @@ export function GenerateWeeklyWizard({ initialWeek, onViewHistory }: GenerateWee
     [week, user?.name]
   )
 
-  const templates = templatesQuery.data ?? []
-  const profileDefaultId = user?.writing_profile?.default_template_id ?? null
-  const effectiveTemplate =
-    templateChoice ??
-    (profileDefaultId && templates.some((tpl) => tpl.id === profileDefaultId)
-      ? profileDefaultId
-      : 'auto')
-  const templateName =
-    effectiveTemplate === 'auto'
-      ? t(REPORTS.templateAuto)
-      : templates.find((tpl) => tpl.id === effectiveTemplate)?.name ?? t(REPORTS.templateAuto)
-
   const changeWeek = (ref: WeekRef) => {
     setWeek(ref)
     setSelectedOrder(null)
@@ -157,13 +152,41 @@ export function GenerateWeeklyWizard({ initialWeek, onViewHistory }: GenerateWee
     })
   }
 
+  // ── Deck em um clique (IA) — opcional, nunca bloqueia o fluxo manual ─────
+  const deckDraft = useDeckDraft()
+  const [confirmAiDeck, setConfirmAiDeck] = useState(false)
+
+  const runAiDeck = () => {
+    setConfirmAiDeck(false)
+    deckDraft.mutate(
+      { ref: week, activityIds: selectedOrder ?? [] },
+      {
+        onSuccess: (result) => {
+          setDeck(result.layout)
+          setStep(1)
+          if (result.source === 'ai') toast.success(t(REPORTS.aiDeckDone))
+          else toast.info(t(REPORTS.aiDeckFallback))
+        },
+        onError: (err) => toast.error(parseApiError(err).message),
+      }
+    )
+  }
+
+  /** Deck "não trivial" = usuário já mexeu (mais de 1 slide ou capa editada). */
+  const deckHasWork =
+    deck !== null && (deck.slides.length > 1 || deck.slides[0]?.elements.length > 2)
+
+  const requestAiDeck = () => {
+    if (deckHasWork) setConfirmAiDeck(true)
+    else runAiDeck()
+  }
+
   const generate = () => {
     generateMutation.mutate(
       {
         activity_ids: selectedOrder ?? [],
         week_number: week.week,
         year: week.year,
-        template_id: effectiveTemplate === 'auto' ? undefined : effectiveTemplate,
         language,
         layout: deck ?? undefined,
       },
@@ -312,8 +335,28 @@ export function GenerateWeeklyWizard({ initialWeek, onViewHistory }: GenerateWee
             )}
           </div>
 
-          <div className="flex justify-end">
-            <Button size="lg" disabled={selectedSet.size === 0} onClick={goToAssemble}>
+          <div className="flex flex-col-reverse items-stretch gap-2 sm:flex-row sm:items-center sm:justify-end">
+            {/* IA opcional: monta o rascunho do deck — o usuário sempre pode ajustar */}
+            <Button
+              size="lg"
+              variant="outline"
+              disabled={selectedSet.size === 0 || deckDraft.isPending}
+              onClick={requestAiDeck}
+              title={t(REPORTS.aiDeckHint)}
+            >
+              {deckDraft.isPending ? (
+                <>
+                  <Loader2 className="animate-spin" aria-hidden="true" />
+                  {t(REPORTS.aiDeckBuilding)}
+                </>
+              ) : (
+                <>
+                  <Sparkles aria-hidden="true" />
+                  {t(REPORTS.aiDeck)}
+                </>
+              )}
+            </Button>
+            <Button size="lg" disabled={selectedSet.size === 0 || deckDraft.isPending} onClick={goToAssemble}>
               {t(REPORTS.continueBtn)}
               <ChevronRight aria-hidden="true" />
             </Button>
@@ -331,62 +374,37 @@ export function GenerateWeeklyWizard({ initialWeek, onViewHistory }: GenerateWee
             onPinnedChange={handlePinnedChange}
           />
 
-          <div className="rounded-xl border border-border/60 bg-white p-4 shadow-card">
-            <p className="text-sm font-semibold text-gray-900">{t(REPORTS.presentationConfig)}</p>
-            <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-              <div className="w-full min-w-0 sm:max-w-xs">
-                <label className="mb-1.5 block text-xs font-medium text-gray-600" htmlFor="template-select">
-                  {t(REPORTS.template)}
-                </label>
-                <Select value={effectiveTemplate} onValueChange={(value) => setTemplateChoice(value)}>
-                  <SelectTrigger id="template-select" aria-label={t(REPORTS.template)}>
-                    <SelectValue placeholder={t(REPORTS.template)} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="auto">{t(REPORTS.templateAuto)}</SelectItem>
-                    {templates.map((template) => (
-                      <SelectItem key={template.id} value={template.id}>
-                        {template.name}
-                        {template.id === profileDefaultId ? ` · ${t(REPORTS.templateDefaultTag)}` : ''}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <p className="mb-1.5 text-xs font-medium text-gray-600">{t(REPORTS.language)}</p>
-                <div className="flex overflow-hidden rounded-lg border border-border" role="group" aria-label={t(REPORTS.language)}>
-                  {(['pt', 'en'] as const).map((value) => (
-                    <button
-                      key={value}
-                      type="button"
-                      aria-pressed={language === value}
-                      onClick={() => setLanguage(value)}
-                      className={
-                        language === value
-                          ? 'min-h-[40px] bg-brand px-4 py-2 text-sm font-medium text-white'
-                          : 'min-h-[40px] bg-white px-4 py-2 text-sm text-gray-600 transition-colors hover:bg-gray-50'
-                      }
-                    >
-                      {value === 'pt' ? 'Português' : 'English'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
-            <Button variant="outline" onClick={() => setStep(0)}>
-              <ChevronLeft aria-hidden="true" />
-              {t(COMMON.back)}
-            </Button>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row">
+              <Button variant="outline" onClick={() => setStep(0)}>
+                <ChevronLeft aria-hidden="true" />
+                {t(COMMON.back)}
+              </Button>
+              <Button
+                variant="ghost"
+                disabled={deckDraft.isPending}
+                onClick={requestAiDeck}
+                title={t(REPORTS.aiDeckHint)}
+              >
+                {deckDraft.isPending ? (
+                  <>
+                    <Loader2 className="animate-spin" aria-hidden="true" />
+                    {t(REPORTS.aiDeckBuilding)}
+                  </>
+                ) : (
+                  <>
+                    <Sparkles aria-hidden="true" />
+                    {t(REPORTS.aiDeck)}
+                  </>
+                )}
+              </Button>
+            </div>
             <Button size="lg" disabled={totalSlides === 0} onClick={() => setStep(2)}>
               {t(REPORTS.reviewAndGenerate)}
               <ChevronRight aria-hidden="true" />
             </Button>
           </div>
+
         </div>
       )}
 
@@ -478,16 +496,6 @@ export function GenerateWeeklyWizard({ initialWeek, onViewHistory }: GenerateWee
                     <dt className="text-gray-500">{t(REPORTS.summarySlides)}</dt>
                     <dd className="font-medium text-gray-900 sm:mt-0.5">{totalSlides}</dd>
                   </div>
-                  <div className="flex justify-between gap-3 sm:block">
-                    <dt className="text-gray-500">{t(REPORTS.template)}</dt>
-                    <dd className="font-medium text-gray-900 sm:mt-0.5">{templateName}</dd>
-                  </div>
-                  <div className="flex justify-between gap-3 sm:block">
-                    <dt className="text-gray-500">{t(REPORTS.language)}</dt>
-                    <dd className="font-medium text-gray-900 sm:mt-0.5">
-                      {language === 'pt' ? 'Português' : 'English'}
-                    </dd>
-                  </div>
                 </dl>
               </div>
 
@@ -509,6 +517,25 @@ export function GenerateWeeklyWizard({ initialWeek, onViewHistory }: GenerateWee
           )}
         </div>
       )}
+
+      {/* Confirmação antes de substituir trabalho manual pelo rascunho da IA */}
+      <Dialog open={confirmAiDeck} onOpenChange={setConfirmAiDeck}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t(REPORTS.aiDeckReplace)}</DialogTitle>
+            <DialogDescription>{t(REPORTS.aiDeckReplaceHint)}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmAiDeck(false)}>
+              {t(COMMON.cancel)}
+            </Button>
+            <Button onClick={runAiDeck}>
+              <Sparkles aria-hidden="true" />
+              {t(REPORTS.aiDeck)}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

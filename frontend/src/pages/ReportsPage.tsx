@@ -32,7 +32,7 @@ export function ReportsPage() {
   const [presetWeek, setPresetWeek] = useState<WeekRef | null>(null)
 
   return (
-    <PageContainer title={t(REPORTS.title)} maxWidth="5xl">
+    <PageContainer title={t(REPORTS.title)} maxWidth="full">
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
           <TabsTrigger value="gerar">

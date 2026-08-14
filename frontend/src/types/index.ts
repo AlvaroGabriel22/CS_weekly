@@ -107,7 +107,8 @@ export interface WeeklyReport {
   language: string
   version: number
   title: string | null
-  content: Record<string, unknown> | null
+  /** content.layout = layout do editor WYSIWYG (quando o deck foi montado à mão). */
+  content: (Record<string, unknown> & { layout?: import('@/components/reports/slideLayout').DeckLayout }) | null
   pptx_path: string | null
   ai_summary: string | null
   coverage: CoverageMetrics | null
@@ -152,6 +153,19 @@ export interface Template {
 // ── Novos tipos (área de departamentos / colegas) ──────────────────────────
 
 /** Usuário no organograma (GET /users/org). */
+/** Cargos de gestão — espelho de MANAGEMENT_ROLES do backend. */
+export const MANAGEMENT_ROLES = [
+  'Gerente Sr',
+  'Gerente PL',
+  'Gerente Jr',
+  'Chefe',
+  'Supervisor',
+] as const
+
+export function isManagementRole(role: string | undefined): boolean {
+  return !!role && (MANAGEMENT_ROLES as readonly string[]).includes(role)
+}
+
 export interface OrgUser {
   id: string
   name: string

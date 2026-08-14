@@ -30,8 +30,30 @@ const NAV_ITEMS: { to: string; label: Msg; end: boolean }[] = [
   { to: '/departamentos', label: COMMON.departments, end: false },
 ]
 
-/** Rotas onde a topbar entra no modo mínimo (só "Voltar ao início"). */
+/** Rotas onde a topbar entra no modo mínimo (só "Voltar"). */
 const MINIMAL_PREFIXES = ['/departamentos', '/colegas']
+
+/** Setor vindo do state de navegação (organograma → colega), se houver. */
+function sectorFromState(state: unknown): string | undefined {
+  if (typeof state !== 'object' || state === null) return undefined
+  const sector = (state as { sector?: unknown }).sector
+  return typeof sector === 'string' && sector.length > 0 ? sector : undefined
+}
+
+/**
+ * Destino do "Voltar" hierárquico (uma tela por clique):
+ * /colegas/:id → organograma do setor do colega (fallback /departamentos);
+ * /departamentos/:sector → /departamentos; /departamentos → / (Início).
+ */
+function backTarget(pathname: string, state: unknown): string {
+  const path = pathname.replace(/\/+$/, '')
+  if (path.startsWith('/colegas')) {
+    const sector = sectorFromState(state)
+    return sector ? `/departamentos/${sector}` : '/departamentos'
+  }
+  if (path.startsWith('/departamentos/')) return '/departamentos'
+  return '/'
+}
 
 function LogoMark({ withText = true }: { withText?: boolean }) {
   return (
@@ -74,7 +96,8 @@ export function TopBar() {
   const { user, logout } = useAuth()
   const { t } = useI18n()
   const navigate = useNavigate()
-  const { pathname } = useLocation()
+  const location = useLocation()
+  const { pathname } = location
   const [mobileOpen, setMobileOpen] = useState(false)
 
   const minimal = MINIMAL_PREFIXES.some(prefix => pathname.startsWith(prefix))
@@ -101,13 +124,13 @@ export function TopBar() {
   if (minimal) {
     return (
       <header className="sticky top-0 z-40 border-b border-border bg-white">
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
+        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6">
           <Link
-            to="/"
+            to={backTarget(pathname, location.state)}
             className="-ml-2 inline-flex min-h-[40px] min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900"
           >
             <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
-            <span className="truncate">{t(COMMON.backToHome)}</span>
+            <span className="truncate">{t(COMMON.back)}</span>
           </Link>
           <div className="flex shrink-0 items-center gap-1.5">
             <LanguageSwitcher variant="compact" />
@@ -122,7 +145,7 @@ export function TopBar() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-white">
-      <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4 sm:px-6">
+      <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-4 sm:px-6">
         {/* Hambúrguer (mobile) */}
         <button
           type="button"

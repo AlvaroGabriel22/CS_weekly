@@ -9,6 +9,7 @@
 import { useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 import {
+  AlertCircle,
   CalendarPlus,
   FileSpreadsheet,
   Image as ImageIcon,
@@ -17,6 +18,7 @@ import {
   Paperclip,
   Pencil,
   Plus,
+  RotateCw,
   Trash2,
   X,
 } from 'lucide-react'
@@ -111,13 +113,13 @@ function isImageAttachment(att: Attachment): boolean {
   return att.mime_type?.startsWith('image/') || isImageName(att.original_filename)
 }
 
-/** null = arquivo OK; string = mensagem de erro localizada. */
+/** null = arquivo OK; string = mensagem de erro localizada (curta, p/ chip). */
 function fileProblem(file: File, t: Translator): string | null {
   if (!ALLOWED_EXTENSIONS.includes(fileExt(file.name))) {
-    return t(AGENDA.fileInvalid, { name: file.name })
+    return t(AGENDA.fileTypeChip)
   }
   if (file.size > MAX_FILE_BYTES) {
-    return t(AGENDA.fileTooLarge, { name: file.name })
+    return t(AGENDA.fileSizeChip)
   }
   return null
 }
@@ -125,9 +127,93 @@ function fileProblem(file: File, t: Translator): string | null {
 interface PendingFile {
   id: number
   file: File
+  /** Mensagem localizada quando o arquivo falhou (validação ou servidor). */
+  error?: string
+  /** Reprovado na validação local — reenviar não resolve. */
+  clientInvalid?: boolean
 }
 
 let pendingFileSeq = 0
+
+/** Monta itens de fila a partir do input de arquivos (inválidos já em erro). */
+function toPendingFiles(picked: File[], t: Translator): PendingFile[] {
+  return picked.map(file => {
+    const problem = fileProblem(file, t)
+    return problem
+      ? { id: ++pendingFileSeq, file, error: problem, clientInvalid: true }
+      : { id: ++pendingFileSeq, file }
+  })
+}
+
+/** Chip de arquivo PENDENTE: spinner enquanto envia, estado de erro com
+ *  mensagem curta abaixo (role="alert"), remover e reenviar. */
+function PendingFileChip({
+  item,
+  uploading,
+  disabled,
+  onRemove,
+  onRetry,
+}: {
+  item: PendingFile
+  uploading: boolean
+  disabled: boolean
+  onRemove: () => void
+  onRetry?: () => void
+}) {
+  const { t } = useI18n()
+  const hasError = Boolean(item.error) && !uploading
+  return (
+    <div className="min-w-0 max-w-full">
+      <span
+        className={cn(
+          'inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md border py-0.5 pl-1.5 pr-0.5 text-xs',
+          hasError ? 'border-red-500 bg-red-50 text-red-700' : 'border-gray-200 bg-white text-gray-700'
+        )}
+      >
+        {uploading ? (
+          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-brand" aria-hidden="true" />
+        ) : hasError ? (
+          <AlertCircle className="h-3.5 w-3.5 shrink-0 text-red-600" aria-hidden="true" />
+        ) : isImageName(item.file.name) ? (
+          <ImageIcon className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden="true" />
+        ) : (
+          <FileSpreadsheet className="h-3.5 w-3.5 shrink-0 text-brand" aria-hidden="true" />
+        )}
+        <span className="max-w-[140px] truncate">{item.file.name}</span>
+        {hasError && !item.clientInvalid && onRetry && (
+          <button
+            type="button"
+            onClick={onRetry}
+            disabled={disabled}
+            aria-label={t(AGENDA.retryFile, { name: item.file.name })}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-red-600 transition-colors hover:bg-red-100 disabled:opacity-50"
+          >
+            <RotateCw className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onRemove}
+          disabled={disabled}
+          aria-label={t(AGENDA.removeFile, { name: item.file.name })}
+          className={cn(
+            'flex h-7 w-7 shrink-0 items-center justify-center rounded transition-colors disabled:opacity-50',
+            hasError
+              ? 'text-red-500 hover:bg-red-100 hover:text-red-700'
+              : 'text-gray-400 hover:bg-gray-100 hover:text-red-600'
+          )}
+        >
+          <X className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
+      </span>
+      {hasError && (
+        <p role="alert" className="mt-0.5 min-w-0 max-w-full break-words text-xs text-red-600">
+          {item.error}
+        </p>
+      )}
+    </div>
+  )
+}
 
 /** Chip de um anexo JÁ salvo (miniatura p/ imagem, exclusão em 2 passos). */
 function AttachmentChip({
@@ -233,7 +319,6 @@ function NewActivityForm({
   const [description, setDescription] = useState('')
   const [errors, setErrors] = useState<NormalizedError['fields']>({})
   const [files, setFiles] = useState<PendingFile[]>([])
-  const [fileError, setFileError] = useState<string | null>(null)
   const [uploadingId, setUploadingId] = useState<number | null>(null)
   /** Atividade já criada cujos anexos falharam (habilita "Tentar novamente"). */
   const [retryActivityId, setRetryActivityId] = useState<string | null>(null)
@@ -241,43 +326,42 @@ function NewActivityForm({
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const busy = create.isPending || uploadingId !== null
+  /** Arquivos que ainda podem ser (re)enviados ao servidor. */
+  const retryableFiles = files.filter(f => !f.clientInvalid)
 
   const handlePickFiles = (e: ChangeEvent<HTMLInputElement>) => {
     const picked = Array.from(e.target.files ?? [])
     e.target.value = ''
-    const problems: string[] = []
-    const valid: PendingFile[] = []
-    for (const file of picked) {
-      const problem = fileProblem(file, t)
-      if (problem) problems.push(problem)
-      else valid.push({ id: ++pendingFileSeq, file })
-    }
-    if (valid.length > 0) setFiles(prev => [...prev, ...valid])
-    setFileError(problems.length > 0 ? problems.join(' ') : null)
+    const items = toPendingFiles(picked, t)
+    if (items.length > 0) setFiles(prev => [...prev, ...items])
   }
 
   const removePending = (id: number) => {
     const next = files.filter(f => f.id !== id)
     setFiles(next)
-    if (next.length === 0) setRetryActivityId(null)
+    if (!next.some(f => !f.clientInvalid)) setRetryActivityId(null)
   }
 
-  /** Envia a fila em sequência; mantém na lista os que falharem. */
+  /** Envia a fila em sequência; quem falhar fica no chip com o erro. */
   const uploadFiles = async (activityId: string, queue: PendingFile[]) => {
-    let lastError: unknown = null
+    let failed = 0
     for (const pending of queue) {
+      if (pending.clientInvalid) continue
       setUploadingId(pending.id)
+      setFiles(prev => prev.map(f => (f.id === pending.id ? { ...f, error: undefined } : f)))
       try {
         await upload.mutateAsync({ activityId, file: pending.file })
         setFiles(prev => prev.filter(f => f.id !== pending.id))
       } catch (err) {
-        lastError = err
+        failed += 1
+        const message = parseApiError(err).message
+        setFiles(prev => prev.map(f => (f.id === pending.id ? { ...f, error: message } : f)))
       }
     }
     setUploadingId(null)
-    if (lastError !== null) {
+    if (failed > 0) {
       setRetryActivityId(activityId)
-      toast.error(parseApiError(lastError).message)
+      toast.error(failed === 1 ? t(AGENDA.uploadFailedOne) : t(AGENDA.uploadFailedMany, { n: failed }))
     } else {
       setRetryActivityId(null)
       titleRef.current?.focus()
@@ -288,8 +372,8 @@ function NewActivityForm({
     e.preventDefault()
     if (busy) return
     // Reenvio de anexos que falharam (atividade já existe).
-    if (retryActivityId && files.length > 0) {
-      void uploadFiles(retryActivityId, files)
+    if (retryActivityId && retryableFiles.length > 0) {
+      void uploadFiles(retryActivityId, retryableFiles)
       return
     }
     const trimmed = title.trim()
@@ -373,37 +457,20 @@ function NewActivityForm({
         </div>
 
         {files.length > 0 && (
-          <div className="flex min-w-0 flex-wrap gap-1.5">
+          <div className="flex min-w-0 flex-wrap items-start gap-1.5">
             {files.map(pending => (
-              <span
+              <PendingFileChip
                 key={pending.id}
-                className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md border border-gray-200 bg-white py-0.5 pl-1.5 pr-0.5 text-xs text-gray-700"
-              >
-                {uploadingId === pending.id ? (
-                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-brand" aria-hidden="true" />
-                ) : isImageName(pending.file.name) ? (
-                  <ImageIcon className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden="true" />
-                ) : (
-                  <FileSpreadsheet className="h-3.5 w-3.5 shrink-0 text-brand" aria-hidden="true" />
-                )}
-                <span className="max-w-[140px] truncate">{pending.file.name}</span>
-                <button
-                  type="button"
-                  onClick={() => removePending(pending.id)}
-                  disabled={uploadingId !== null}
-                  aria-label={t(AGENDA.removeFile, { name: pending.file.name })}
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-red-600 disabled:opacity-50"
-                >
-                  <X className="h-3.5 w-3.5" aria-hidden="true" />
-                </button>
-              </span>
+                item={pending}
+                uploading={uploadingId === pending.id}
+                disabled={uploadingId !== null}
+                onRemove={() => removePending(pending.id)}
+                onRetry={
+                  retryActivityId ? () => void uploadFiles(retryActivityId, [pending]) : undefined
+                }
+              />
             ))}
           </div>
-        )}
-        {fileError && (
-          <p role="alert" className="text-xs text-red-600">
-            {fileError}
-          </p>
         )}
 
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -563,7 +630,9 @@ function ActivityCard({
   const update = useUpdateActivity(monthRef)
   const upload = useUploadAttachment(monthRef)
   const removeAttachment = useDeleteAttachment(monthRef)
-  const [uploadingCount, setUploadingCount] = useState(0)
+  const [pendingUploads, setPendingUploads] = useState<PendingFile[]>([])
+  const [uploadingId, setUploadingId] = useState<number | null>(null)
+  const uploadBusy = uploadingId !== null
   const fileInputRef = useRef<HTMLInputElement>(null)
   const optimistic = isOptimisticActivity(activity)
   const status = STATUS_META[activity.status]
@@ -577,28 +646,38 @@ function ActivityCard({
     )
   }
 
-  const handlePickFiles = async (e: ChangeEvent<HTMLInputElement>) => {
+  /** Envia em sequência; sucesso remove o chip, falha fica no chip com o erro. */
+  const runUploads = async (queue: PendingFile[]) => {
+    let ok = 0
+    let failed = 0
+    for (const item of queue) {
+      setUploadingId(item.id)
+      setPendingUploads(prev => prev.map(f => (f.id === item.id ? { ...f, error: undefined } : f)))
+      try {
+        await upload.mutateAsync({ activityId: activity.id, file: item.file })
+        ok += 1
+        setPendingUploads(prev => prev.filter(f => f.id !== item.id))
+      } catch (err) {
+        failed += 1
+        const message = parseApiError(err).message
+        setPendingUploads(prev => prev.map(f => (f.id === item.id ? { ...f, error: message } : f)))
+      }
+    }
+    setUploadingId(null)
+    if (ok > 0) toast.success(t(AGENDA.attached))
+    if (failed > 0) {
+      toast.error(failed === 1 ? t(AGENDA.uploadFailedOne) : t(AGENDA.uploadFailedMany, { n: failed }))
+    }
+  }
+
+  const handlePickFiles = (e: ChangeEvent<HTMLInputElement>) => {
     const picked = Array.from(e.target.files ?? [])
     e.target.value = ''
-    const valid: File[] = []
-    for (const file of picked) {
-      const problem = fileProblem(file, t)
-      if (problem) toast.error(problem)
-      else valid.push(file)
-    }
-    if (valid.length === 0) return
-    setUploadingCount(valid.length)
-    let ok = 0
-    for (const file of valid) {
-      try {
-        await upload.mutateAsync({ activityId: activity.id, file })
-        ok += 1
-      } catch (err) {
-        toast.error(parseApiError(err).message)
-      }
-      setUploadingCount(count => Math.max(0, count - 1))
-    }
-    if (ok > 0) toast.success(t(AGENDA.attached))
+    const items = toPendingFiles(picked, t)
+    if (items.length === 0) return
+    setPendingUploads(prev => [...prev, ...items])
+    const valid = items.filter(item => !item.clientInvalid)
+    if (valid.length > 0) void runUploads(valid)
   }
 
   const deleteAttachment = (attachmentId: string) => {
@@ -639,12 +718,19 @@ function ActivityCard({
                 onDelete={() => deleteAttachment(att.id)}
               />
             ))}
-            {uploadingCount > 0 && (
-              <Loader2 className="h-4 w-4 shrink-0 animate-spin text-brand" aria-hidden="true" />
-            )}
+            {pendingUploads.map(item => (
+              <PendingFileChip
+                key={item.id}
+                item={item}
+                uploading={uploadingId === item.id}
+                disabled={uploadBusy}
+                onRemove={() => setPendingUploads(prev => prev.filter(f => f.id !== item.id))}
+                onRetry={() => void runUploads([item])}
+              />
+            ))}
             <button
               type="button"
-              disabled={optimistic || uploadingCount > 0}
+              disabled={optimistic || uploadBusy}
               onClick={() => fileInputRef.current?.click()}
               aria-label={t(AGENDA.attach)}
               className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-dashed border-gray-300 text-gray-400 transition-colors hover:border-brand hover:text-brand disabled:opacity-50"

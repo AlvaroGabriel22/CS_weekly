@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api.routes import activities, auth, users, weekly, pptx
+from app.api.routes import activities, ai_features, auth, translate, users, weekly, pptx
 from app.core.config import get_settings
 from app.core.database import Base, engine
 from app.core.exceptions import QWIException
@@ -68,6 +68,8 @@ def create_app() -> FastAPI:
     app.include_router(users.router, prefix="/api")
     app.include_router(activities.router, prefix="/api")
     app.include_router(weekly.router, prefix="/api")
+    app.include_router(translate.router, prefix="/api")
+    app.include_router(ai_features.router, prefix="/api")
     app.include_router(pptx.router)
 
     # Arquivos enviados (fotos de perfil etc.) servidos estaticamente

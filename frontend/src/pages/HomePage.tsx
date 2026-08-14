@@ -222,7 +222,7 @@ export function HomePage() {
   })
 
   return (
-    <PageContainer title="" maxWidth="6xl">
+    <PageContainer title="">
       <div className="space-y-8 animate-fade-in">
         {/* 1 · Hero */}
         <section>

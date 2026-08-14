@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.deps import create_user_with_profile, get_current_user
@@ -19,6 +20,16 @@ def _field_error(field: str, message: str, hint: str) -> HTTPException:
     )
 
 
+def _find_user_by_email(db: Session, email: str) -> User | None:
+    """Busca por email SEM diferenciar maiúsculas (contas antigas têm
+    o email gravado como foi digitado, ex.: 'Alvaro...@gmail.com')."""
+    return (
+        db.query(User)
+        .filter(func.lower(User.email) == email.lower().strip())
+        .first()
+    )
+
+
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def register(data: UserCreate, db: Session = Depends(get_db)):
     if data.password != data.password_confirm:
@@ -28,7 +39,7 @@ def register(data: UserCreate, db: Session = Depends(get_db)):
             "Digite a mesma senha nos dois campos.",
         )
 
-    existing_email = db.query(User).filter(User.email == data.email).first()
+    existing_email = _find_user_by_email(db, data.email)
     if existing_email:
         raise _field_error(
             "email",
@@ -58,7 +69,7 @@ def register(data: UserCreate, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=Token)
 def login(data: UserLogin, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == data.email).first()
+    user = _find_user_by_email(db, data.email)
     if not user or not verify_password(data.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
@@ -83,7 +94,7 @@ def reset_password(data: PasswordResetRequest, db: Session = Depends(get_db)):
             "Digite a mesma senha nos dois campos.",
         )
 
-    user = db.query(User).filter(User.email == data.email.lower().strip()).first()
+    user = _find_user_by_email(db, data.email)
     # Resposta única para email inexistente OU matrícula errada:
     # não revela qual dos dois falhou (evita enumeração de contas).
     if (

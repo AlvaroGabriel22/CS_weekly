@@ -29,6 +29,8 @@ export interface SlideElement {
   text?: string
   binding?: ElementBinding
   attachment_id?: string
+  /** Tabelas: dados embutidos pelo backend na geração (pré-visualização). */
+  table?: ExtractedTable
   shape?: ShapeKind
   /** Preenchimento da forma (hex) ou null/ausente = sem preenchimento. */
   fill?: string | null
@@ -126,9 +128,17 @@ export type ContentBlock =
 export const AI_BINDINGS: ElementBinding[] = ['summary', 'kpis', 'conclusions', 'next_steps']
 
 /**
+ * MVP: os blocos de IA (Resumo, KPIs, Conclusões, Próximos passos) ficam
+ * DESLIGADOS no editor — a IA entra em outro step do projeto. Toda a
+ * infraestrutura (bindings, render no canvas e no PPTX) permanece pronta:
+ * basta voltar esta flag para true.
+ */
+export const SHOW_AI_BLOCKS = false
+
+/**
  * Bloquinhos na ORDEM DE INSERÇÃO: para cada atividade (por data/criação),
  * a descrição, depois cada anexo (imagem/tabela) na ordem de upload.
- * Ao final, os blocos de conteúdo da IA.
+ * Ao final, os blocos de conteúdo da IA (quando habilitados).
  */
 export function buildContentBlocks(activities: Activity[]): ContentBlock[] {
   const blocks: ContentBlock[] = []
@@ -146,8 +156,10 @@ export function buildContentBlocks(activities: Activity[]): ContentBlock[] {
       }
     }
   }
-  for (const binding of AI_BINDINGS) {
-    blocks.push({ kind: 'ai', id: `blk-ai-${binding}`, binding })
+  if (SHOW_AI_BLOCKS) {
+    for (const binding of AI_BINDINGS) {
+      blocks.push({ kind: 'ai', id: `blk-ai-${binding}`, binding })
+    }
   }
   return blocks
 }

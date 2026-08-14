@@ -124,6 +124,21 @@ export const REPORTS = defineMessages({
   tableBadge: { pt: 'Tabela', en: 'Table', ko: '표' },
   usedBadge: { pt: 'No slide', en: 'On slide', ko: '사용됨' },
 
+  // Tradução por IA dos textos do deck
+  translate: { pt: 'Traduzir', en: 'Translate', ko: '번역' },
+  translating: { pt: 'Traduzindo…', en: 'Translating…', ko: '번역 중…' },
+  translated: { pt: 'Traduzido.', en: 'Translated.', ko: '번역 완료.' },
+  nothingToTranslate: { pt: 'Nada para traduzir.', en: 'Nothing to translate.', ko: '번역할 내용 없음.' },
+
+  // Deck em um clique (IA)
+  aiDeck: { pt: 'Montar com IA', en: 'Build with AI', ko: 'AI로 구성' },
+  aiDeckBuilding: { pt: 'Montando seu deck…', en: 'Building your deck…', ko: '덱 구성 중…' },
+  aiDeckHint: { pt: 'A IA monta; você ajusta.', en: 'AI drafts; you adjust.', ko: 'AI 초안, 직접 조정.' },
+  aiDeckDone: { pt: 'Deck montado.', en: 'Deck ready.', ko: '구성 완료.' },
+  aiDeckFallback: { pt: 'Montagem automática (IA indisponível).', en: 'Automatic layout (AI unavailable).', ko: '자동 구성 (AI 사용 불가).' },
+  aiDeckReplace: { pt: 'Substituir a montagem atual?', en: 'Replace current layout?', ko: '현재 구성을 바꿀까요?' },
+  aiDeckReplaceHint: { pt: 'O deck atual será substituído pelo rascunho da IA.', en: 'Your current deck will be replaced by the AI draft.', ko: '현재 덱이 AI 초안으로 대체됩니다.' },
+
   // StepIndicator
   stepsAria: { pt: 'Passos', en: 'Steps', ko: '단계' },
   stepAria: { pt: 'Passo {n}: {label}', en: 'Step {n}: {label}', ko: '{n}단계: {label}' },

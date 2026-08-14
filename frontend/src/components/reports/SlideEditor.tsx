@@ -35,6 +35,8 @@ import {
   FileSpreadsheet,
   GripVertical,
   ImageIcon,
+  Languages,
+  Loader2,
   Minus,
   Pin,
   PinOff,
@@ -47,6 +49,9 @@ import {
   Type,
   Undo2,
 } from 'lucide-react'
+import api from '@/lib/api'
+import { parseApiError } from '@/lib/errors'
+import { useToast } from '@/components/ui/toast'
 import { useI18n, type Msg } from '@/i18n'
 import { REPORTS } from '@/i18n/messages/reports'
 import {
@@ -213,9 +218,15 @@ function ShapeContent({ element }: { element: SlideElement }) {
   const stroke = element.color ?? COLORS.brand
   const width = element.stroke_width ?? 2
   if (element.shape === 'line') {
+    // w=0 → linha vertical; h=0 → horizontal (desenha no meio do wrapper,
+    // que mantém uma área mínima só para dar o que clicar/arrastar).
+    const x1 = element.w === 0 ? '50%' : '0'
+    const x2 = element.w === 0 ? '50%' : '100%'
+    const y1 = element.h === 0 ? '50%' : '0'
+    const y2 = element.h === 0 ? '50%' : '100%'
     return (
       <svg className="h-full w-full overflow-visible" aria-hidden preserveAspectRatio="none">
-        <line x1="0" y1="0" x2="100%" y2="100%" stroke={stroke} strokeWidth={width} />
+        <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={stroke} strokeWidth={width} />
       </svg>
     )
   }
@@ -300,7 +311,7 @@ export function SlideThumbnail({
             position: 'absolute',
             left: `${el.x * 100}%`,
             top: `${el.y * 100}%`,
-            width: `${el.w * 100}%`,
+            width: `${Math.max(el.w, el.shape === 'line' ? 0.002 : 0) * 100}%`,
             height: `${Math.max(el.h, el.shape === 'line' ? 0.002 : 0) * 100}%`,
           }}
         >
@@ -391,6 +402,8 @@ function BlockCard({
 
 export function SlideEditor({ deck, onChange, activities, onPinnedChange }: SlideEditorProps) {
   const { t } = useI18n()
+  const { toast } = useToast()
+  const [translating, setTranslating] = useState(false)
   const canvasRef = useRef<HTMLDivElement>(null)
   const [canvasWidth, setCanvasWidth] = useState(720)
   const [selectedSlideId, setSelectedSlideId] = useState<string | null>(deck.slides[0]?.id ?? null)
@@ -576,6 +589,12 @@ export function SlideEditor({ deck, onChange, activities, onPinnedChange }: Slid
       y = Math.min(Math.max(snap(y), 0), 1 - minSize)
       w = Math.min(w, 1 - x)
       h = Math.min(h, 1 - y)
+      // Linhas: snap ao eixo — perto da vertical vira w=0 (reta em pé),
+      // perto da horizontal vira h=0 (reta deitada).
+      if (isLine) {
+        if (w < SNAP && w < h) w = 0
+        else if (h < SNAP && h < w) h = 0
+      }
       patch = { x, y, w, h }
     }
     setGuides(showGuides)
@@ -676,6 +695,43 @@ export function SlideEditor({ deck, onChange, activities, onPinnedChange }: Slid
     setSelectedElementId(element.id)
   }
 
+  /**
+   * Traduz TODOS os textos escritos pelo usuário (todos os slides) via IA.
+   * Aplica como um único commit — Ctrl+Z desfaz a tradução inteira.
+   */
+  const translateDeck = async (target: 'pt' | 'en' | 'ko') => {
+    const current = deckRef.current
+    const refs: { slideId: string; elementId: string }[] = []
+    const texts: string[] = []
+    for (const s of current.slides) {
+      for (const el of s.elements) {
+        if (el.type === 'text' && !el.binding && el.text?.trim()) {
+          refs.push({ slideId: s.id, elementId: el.id })
+          texts.push(el.text)
+        }
+      }
+    }
+    if (texts.length === 0) {
+      toast.info(t(REPORTS.nothingToTranslate))
+      return
+    }
+    setTranslating(true)
+    try {
+      const res = await api.post('/ai/translate', { texts, target })
+      const translated: string[] = res.data.texts
+      let next = current
+      refs.forEach((ref, index) => {
+        next = updateElement(next, ref.slideId, ref.elementId, { text: translated[index] })
+      })
+      commit(next, current)
+      toast.success(t(REPORTS.translated))
+    } catch (err) {
+      toast.error(parseApiError(err).message)
+    } finally {
+      setTranslating(false)
+    }
+  }
+
   // ── operações de slide ───────────────────────────────────────────────────
 
   const addSlide = () => {
@@ -762,7 +818,7 @@ export function SlideEditor({ deck, onChange, activities, onPinnedChange }: Slid
           {blocks.length === 0 ? (
             <p className="px-1 pb-1 text-xs text-gray-400">{t(REPORTS.blocksEmpty)}</p>
           ) : (
-            <div className="flex gap-2 overflow-x-auto pb-1 lg:max-h-[26rem] lg:flex-col lg:overflow-y-auto lg:overflow-x-visible lg:pb-0">
+            <div className="flex gap-2 overflow-x-auto pb-1 lg:max-h-[36rem] lg:flex-col lg:overflow-y-auto lg:overflow-x-visible lg:pb-0">
               {blocks.map(block => (
                 <div key={block.id} className="w-56 shrink-0 lg:w-auto">
                   {block.kind === 'ai' && block.binding === 'summary' && (
@@ -801,6 +857,30 @@ export function SlideEditor({ deck, onChange, activities, onPinnedChange }: Slid
           <button type="button" className={toolButton} onClick={() => addShape('ellipse')} aria-label={t(REPORTS.shapeEllipse)} title={t(REPORTS.shapeEllipse)}>
             <Circle className="h-4 w-4" aria-hidden />
           </button>
+
+          {/* Tradução por IA de todos os textos do deck */}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              className={toolButton}
+              disabled={translating}
+              aria-label={t(REPORTS.translate)}
+              title={t(REPORTS.translate)}
+            >
+              {translating ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              ) : (
+                <Languages className="h-4 w-4" aria-hidden />
+              )}
+              <span className="ml-1 hidden text-xs sm:inline">
+                {translating ? t(REPORTS.translating) : t(REPORTS.translate)}
+              </span>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem onSelect={() => translateDeck('pt')}>🇧🇷 Português</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => translateDeck('en')}>🇺🇸 English</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => translateDeck('ko')}>🇰🇷 한국어</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           <span className="mx-1 h-5 w-px bg-border" aria-hidden />
 
@@ -956,9 +1036,10 @@ export function SlideEditor({ deck, onChange, activities, onPinnedChange }: Slid
             const frame: CSSProperties = {
               left: `${element.x * 100}%`,
               top: `${element.y * 100}%`,
-              width: `${element.w * 100}%`,
+              width: isLine ? Math.max(element.w * 100, 0.5) + '%' : `${element.w * 100}%`,
               height: isLine ? Math.max(element.h * 100, 0.5) + '%' : `${element.h * 100}%`,
-              minHeight: isLine ? 8 : undefined,
+              minWidth: isLine ? 10 : undefined,
+              minHeight: isLine ? 10 : undefined,
             }
             return (
               <div
@@ -1007,7 +1088,8 @@ export function SlideEditor({ deck, onChange, activities, onPinnedChange }: Slid
                 )}
                 {isSelected && !isEditing && (
                   <>
-                    {(['nw', 'ne', 'sw', 'se'] as const).map(corner => (
+                    {/* Linha: só as duas extremidades; demais: 4 cantos. */}
+                    {(isLine ? (['nw', 'se'] as const) : (['nw', 'ne', 'sw', 'se'] as const)).map(corner => (
                       <span
                         key={corner}
                         className={cn(
@@ -1036,51 +1118,58 @@ export function SlideEditor({ deck, onChange, activities, onPinnedChange }: Slid
       </div>
 
       {/* ── Rail de slides (DIREITA) ── */}
-      <div
-        className="order-3 flex shrink-0 gap-2 overflow-x-auto pb-1 lg:w-44 lg:flex-col lg:overflow-x-visible lg:overflow-y-auto lg:pb-0"
-        role="list"
-        aria-label={t(REPORTS.slides)}
-      >
-        {deck.slides.map((item, index) => (
-          <div key={item.id} role="listitem" className="group relative shrink-0">
+      <aside className="order-3 shrink-0 lg:w-52">
+        <div className="rounded-xl border border-border/60 bg-gray-50/70 p-2.5">
+          <p className="px-1 pb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+            {t(REPORTS.slides)}
+          </p>
+          <div
+            className="flex gap-3 overflow-x-auto p-1 lg:max-h-[36rem] lg:flex-col lg:overflow-y-auto lg:overflow-x-visible"
+            role="list"
+            aria-label={t(REPORTS.slides)}
+          >
+            {deck.slides.map((item, index) => (
+              <div key={item.id} role="listitem" className="group relative shrink-0">
+                <button
+                  type="button"
+                  onClick={() => { setSelectedSlideId(item.id); setSelectedElementId(null) }}
+                  className={cn(
+                    'block rounded-md p-0.5 transition-all',
+                    item.id === slide.id ? 'ring-2 ring-brand' : 'hover:ring-2 hover:ring-brand-200',
+                  )}
+                  aria-label={t(REPORTS.slideOf, { n: index + 1, total: deck.slides.length })}
+                  aria-current={item.id === slide.id}
+                >
+                  <SlideThumbnail slide={item} width={160} activities={activities} t={t} />
+                </button>
+                <span className="absolute bottom-1.5 left-2 rounded bg-gray-900/60 px-1 text-[10px] font-medium text-white">
+                  {index + 1}
+                </span>
+                <div className="absolute right-1 top-1 hidden gap-0.5 rounded-md bg-white/95 p-0.5 shadow-sm group-hover:flex">
+                  <button type="button" className="rounded p-1 text-gray-500 hover:bg-gray-100" onClick={() => moveSlide(item.id, -1)} disabled={index === 0} aria-label={t(REPORTS.moveUp)}>
+                    <ArrowUp className="h-3.5 w-3.5" aria-hidden />
+                  </button>
+                  <button type="button" className="rounded p-1 text-gray-500 hover:bg-gray-100" onClick={() => moveSlide(item.id, 1)} disabled={index === deck.slides.length - 1} aria-label={t(REPORTS.moveDown)}>
+                    <ArrowDown className="h-3.5 w-3.5" aria-hidden />
+                  </button>
+                  {index > 0 && (
+                    <button type="button" className="rounded p-1 text-red-500 hover:bg-red-50" onClick={() => deleteSlide(item.id)} aria-label={t(REPORTS.deleteSlide)}>
+                      <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
             <button
               type="button"
-              onClick={() => { setSelectedSlideId(item.id); setSelectedElementId(null) }}
-              className={cn(
-                'block rounded-md p-0.5 transition-all',
-                item.id === slide.id ? 'ring-2 ring-brand' : 'hover:ring-2 hover:ring-brand-200',
-              )}
-              aria-label={t(REPORTS.slideOf, { n: index + 1, total: deck.slides.length })}
-              aria-current={item.id === slide.id}
+              onClick={addSlide}
+              className="flex h-[90px] w-40 shrink-0 items-center justify-center gap-1 rounded-md border-2 border-dashed border-border text-xs font-medium text-gray-500 transition-colors hover:border-brand hover:text-brand lg:w-full"
             >
-              <SlideThumbnail slide={item} width={144} activities={activities} t={t} />
+              <Plus className="h-4 w-4" aria-hidden /> {t(REPORTS.addSlide)}
             </button>
-            <span className="absolute bottom-1.5 left-2 rounded bg-gray-900/60 px-1 text-[10px] font-medium text-white">
-              {index + 1}
-            </span>
-            <div className="absolute right-1 top-1 hidden gap-0.5 rounded-md bg-white/95 p-0.5 shadow-sm group-hover:flex">
-              <button type="button" className="rounded p-1 text-gray-500 hover:bg-gray-100" onClick={() => moveSlide(item.id, -1)} disabled={index === 0} aria-label={t(REPORTS.moveUp)}>
-                <ArrowUp className="h-3.5 w-3.5" aria-hidden />
-              </button>
-              <button type="button" className="rounded p-1 text-gray-500 hover:bg-gray-100" onClick={() => moveSlide(item.id, 1)} disabled={index === deck.slides.length - 1} aria-label={t(REPORTS.moveDown)}>
-                <ArrowDown className="h-3.5 w-3.5" aria-hidden />
-              </button>
-              {index > 0 && (
-                <button type="button" className="rounded p-1 text-red-500 hover:bg-red-50" onClick={() => deleteSlide(item.id)} aria-label={t(REPORTS.deleteSlide)}>
-                  <Trash2 className="h-3.5 w-3.5" aria-hidden />
-                </button>
-              )}
-            </div>
           </div>
-        ))}
-        <button
-          type="button"
-          onClick={addSlide}
-          className="flex h-[81px] w-36 shrink-0 items-center justify-center gap-1 rounded-md border-2 border-dashed border-border text-xs font-medium text-gray-500 transition-colors hover:border-brand hover:text-brand lg:w-full"
-        >
-          <Plus className="h-4 w-4" aria-hidden /> {t(REPORTS.addSlide)}
-        </button>
-      </div>
+        </div>
+      </aside>
     </div>
   )
 }

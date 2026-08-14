@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
 import type { User } from '@/types'
 
@@ -17,6 +18,7 @@ const AuthContext = createContext<AuthContextType | null>(null)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const queryClient = useQueryClient()
 
   useEffect(() => {
     const token = localStorage.getItem('qwi_token')
@@ -32,6 +34,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string) => {
     const { data } = await api.post('/auth/login', { email, password })
     localStorage.setItem('qwi_token', data.access_token)
+    // Zera o cache de queries: sem isso, dados da conta ANTERIOR (agenda,
+    // relatórios…) vazariam para a sessão da nova conta no mesmo navegador.
+    queryClient.clear()
     const me = await api.get('/auth/me')
     setUser(me.data)
   }
@@ -43,6 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     localStorage.removeItem('qwi_token')
+    queryClient.clear()
     setUser(null)
   }
 

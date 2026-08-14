@@ -62,4 +62,11 @@ export const AGENDA = defineMessages({
   deleteAttachment: { pt: 'Excluir {name}', en: 'Delete {name}', ko: '{name} 삭제' },
   confirmDeleteAttachment: { pt: 'Confirmar exclusão', en: 'Confirm deletion', ko: '삭제 확인' },
   rowsCount: { pt: '{n} linhas', en: '{n} rows', ko: '{n}행' },
+
+  // Anexos: erro por arquivo (chip)
+  fileTypeChip: { pt: 'Tipo não suportado.', en: 'Unsupported type.', ko: '지원하지 않는 형식' },
+  fileSizeChip: { pt: 'Máx. 15MB.', en: 'Max 15MB.', ko: '최대 15MB' },
+  uploadFailedOne: { pt: '1 anexo falhou.', en: '1 attachment failed.', ko: '첨부 1개 실패' },
+  uploadFailedMany: { pt: '{n} anexos falharam.', en: '{n} attachments failed.', ko: '첨부 {n}개 실패' },
+  retryFile: { pt: 'Reenviar {name}', en: 'Retry {name}', ko: '{name} 다시 전송' },
 })
