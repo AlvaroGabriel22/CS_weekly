@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, Download, MoreVertical, Presentation, RefreshCw, Sparkles } from 'lucide-react'
+import { ChevronDown, Download, Monitor, MoreVertical, Presentation, RefreshCw, Sparkles } from 'lucide-react'
 import type { WeekRef } from '@/lib/dates'
 import { parseApiError } from '@/lib/errors'
 import { useI18n, type Msg } from '@/i18n'
@@ -17,6 +17,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { useToast } from '@/components/ui/toast'
 import { downloadWeeklyPptx, useWeeklyReports } from '@/hooks/useWeekly'
+import { DeckViewer, SlideViewer } from '@/components/weekly/SlideViewer'
 import type { WeeklyReport } from '@/types'
 
 export interface HistoryTabProps {
@@ -118,8 +119,14 @@ function ReportCard({
   const { t, locale } = useI18n()
   const { toast } = useToast()
   const [downloading, setDownloading] = useState(false)
+  const [viewing, setViewing] = useState(false)
   const status = statusMeta(report.status)
   const ready = report.status === 'completed' && Boolean(report.pptx_path)
+  // Decks montados no editor têm o layout salvo → preview fiel página a página;
+  // weeklys antigos (sem layout) caem no visualizador de conteúdo legado.
+  const layout = report.content?.layout
+  const hasLayout = Boolean(layout?.slides?.length)
+  const canView = report.status === 'completed' && (hasLayout || Boolean(report.content))
 
   const handleDownload = async () => {
     setDownloading(true)
@@ -159,6 +166,15 @@ function ReportCard({
 
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
           <Button
+            size="sm"
+            className="hidden sm:inline-flex"
+            disabled={!canView}
+            onClick={() => setViewing(true)}
+          >
+            <Monitor aria-hidden="true" />
+            {t(COMMON.view)}
+          </Button>
+          <Button
             variant="outline"
             size="sm"
             className="hidden sm:inline-flex"
@@ -179,6 +195,10 @@ function ReportCard({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem disabled={!canView} onSelect={() => setViewing(true)}>
+                <Monitor aria-hidden="true" />
+                {t(COMMON.view)}
+              </DropdownMenuItem>
               <DropdownMenuItem disabled={!ready || downloading} onSelect={handleDownload}>
                 <Download aria-hidden="true" />
                 {t(REPORTS.downloadPptx)}
@@ -207,6 +227,13 @@ function ReportCard({
             {report.ai_summary}
           </p>
         </details>
+      )}
+
+      {/* Pré-visualização página a página (mesmo viewer dos weeklys de colegas) */}
+      {hasLayout && layout ? (
+        <DeckViewer report={report} layout={layout} open={viewing} onClose={() => setViewing(false)} />
+      ) : (
+        <SlideViewer report={report} open={viewing} onClose={() => setViewing(false)} />
       )}
     </div>
   )

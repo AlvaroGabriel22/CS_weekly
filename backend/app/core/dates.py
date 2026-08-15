@@ -2,12 +2,13 @@
 
 CONVENÇÃO DE SEMANAS (regra da empresa, NÃO é ISO 8601):
 - A semana começa na segunda-feira.
-- W1 do ano Y é a semana que começa na PRIMEIRA segunda-feira de janeiro de Y.
-- Dias antes da primeira segunda (ex.: 01–04/jan/2026) pertencem à última
-  semana do ano anterior.
+- W1 do ano Y é a semana (seg–dom) que CONTÉM o dia 1º de janeiro de Y —
+  mesmo que ela comece em dezembro do ano anterior.
+- O ano de uma semana é o ano do seu DOMINGO (último dia): a semana
+  29/12/2025–04/01/2026 é a W1 de 2026.
 
-Âncora de validação: 10/08/2026 é segunda-feira da W32
-(1ª segunda de 2026 = 05/01; (10/08 − 05/01) / 7 = 31 → semana 32).
+Âncora de validação: 10/08/2026 é segunda-feira da W33
+(W1/2026 começa em 29/12/2025; (10/08 − 29/12) / 7 = 32 → semana 33).
 
 Qualquer código que calcule número de semana DEVE usar este módulo.
 """
@@ -47,10 +48,14 @@ def _as_date(dt: datetime | date) -> date:
 
 
 def first_monday(year: int) -> date:
-    """Primeira segunda-feira de janeiro do ano (início da W1)."""
+    """Segunda-feira da W1 do ano: a segunda da semana que contém 1º/jan.
+
+    (Nome mantido por compatibilidade com os chamadores; pode cair em
+    dezembro do ano anterior.)
+    """
     jan1 = date(year, 1, 1)
     # weekday(): Mon=0 ... Sun=6
-    return jan1 + timedelta(days=(7 - jan1.weekday()) % 7)
+    return jan1 - timedelta(days=jan1.weekday())
 
 
 def monday_of(dt: datetime | date) -> date:
@@ -65,13 +70,10 @@ def calculate_week_number(dt: datetime | date) -> Tuple[int, int]:
     A ordem (week, year) é mantida por compatibilidade com os chamadores.
     """
     monday = monday_of(dt)
-    year = monday.year
-    fm = first_monday(year)
-    if monday < fm:
-        # Dias antes da 1ª segunda pertencem à última semana do ano anterior
-        year -= 1
-        fm = first_monday(year)
-    week = (monday - fm).days // 7 + 1
+    # O ano da semana é o ano do DOMINGO: a semana que contém 1º/jan
+    # pertence ao ano novo (é a W1 dele).
+    year = (monday + timedelta(days=6)).year
+    week = (monday - first_monday(year)).days // 7 + 1
     return week, year
 
 

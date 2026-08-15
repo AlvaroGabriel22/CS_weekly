@@ -72,6 +72,7 @@ function WeekBanner() {
   return (
     <section
       aria-label={t(HOME.weekN, { n: ref.week })}
+      data-tour="week-banner"
       className="rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 p-5 text-white shadow-card sm:p-6"
     >
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between md:gap-6">
@@ -138,7 +139,7 @@ function StatsGrid({ stats }: { stats: DashboardStats }) {
   const daysFilled = Math.min(stats.days_filled, 5)
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
+    <div data-tour="stats" className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
       <StatCard icon={ClipboardList} label={t(HOME.statActivities)} value={stats.activities_count} />
       <StatCard
         icon={CalendarCheck2}

@@ -34,6 +34,8 @@ export const REPORTS = defineMessages({
   undo: { pt: 'Desfazer', en: 'Undo', ko: '실행 취소' },
   redo: { pt: 'Refazer', en: 'Redo', ko: '다시 실행' },
   bold: { pt: 'Negrito', en: 'Bold', ko: '굵게' },
+  italic: { pt: 'Itálico', en: 'Italic', ko: '기울임' },
+  fontFamily: { pt: 'Fonte', en: 'Font', ko: '글꼴' },
   alignLeft: { pt: 'Alinhar à esquerda', en: 'Align left', ko: '왼쪽 정렬' },
   alignCenter: { pt: 'Centralizar', en: 'Align center', ko: '가운데 정렬' },
   alignRight: { pt: 'Alinhar à direita', en: 'Align right', ko: '오른쪽 정렬' },

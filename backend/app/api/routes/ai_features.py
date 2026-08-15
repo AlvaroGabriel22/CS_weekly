@@ -50,6 +50,12 @@ BRAND = "#0C379C"
 DARK = "#1F2937"
 GRAY = "#6B7280"
 
+# Espelho de FONT_FAMILIES do frontend (slideLayout.ts) — manter em sincronia.
+ALLOWED_FONTS = {
+    "Calibri", "Arial", "Verdana", "Tahoma",
+    "Trebuchet MS", "Georgia", "Times New Roman", "Courier New",
+}
+
 
 # ── util ─────────────────────────────────────────────────────────────────────
 
@@ -483,6 +489,9 @@ def _sanitize_deck(
             if etype == "text":
                 clean["text"] = str(el.get("text"))[:2000]
                 clean["bold"] = bool(el.get("bold"))
+                clean["italic"] = bool(el.get("italic"))
+                if el.get("font_family") in ALLOWED_FONTS:
+                    clean["font_family"] = el["font_family"]
                 if el.get("align") in {"left", "center", "right"}:
                     clean["align"] = el["align"]
                 color = str(el.get("color") or DARK)

@@ -413,7 +413,7 @@ function NewActivityForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} noValidate className="rounded-lg border border-gray-200 bg-gray-50/60 p-4">
+    <form data-tour="day-form" onSubmit={handleSubmit} noValidate className="rounded-lg border border-gray-200 bg-gray-50/60 p-4">
       <p className="mb-2.5 text-sm font-medium text-gray-900">{t(AGENDA.newActivity)}</p>
       <div className="space-y-2.5">
         <div>
@@ -488,6 +488,7 @@ function NewActivityForm({
             size="sm"
             disabled={busy}
             onClick={() => fileInputRef.current?.click()}
+            data-tour="attach"
             className="min-h-10 bg-white"
           >
             <Paperclip aria-hidden="true" />

@@ -38,7 +38,7 @@ export function DepartmentsPage() {
         <ErrorState error={error} onRetry={() => refetch()} />
       ) : (
         // p-1/-m-1: folga para ring/shadow dos cards nunca serem clipados.
-        <div className="-m-1 grid grid-cols-1 gap-4 p-1 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
+        <div data-tour="departments" className="-m-1 grid grid-cols-1 gap-4 p-1 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
           {SECTORS.map((sector, idx) =>
             isLoading ? (
               <div

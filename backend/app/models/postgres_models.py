@@ -389,3 +389,19 @@ class DepartmentRollup(Base):
     __table_args__ = (
         UniqueConstraint("sector", "year", "week_number", name="uq_rollup_sector_week"),
     )
+
+
+class UserFlags(Base):
+    """Flags de experiência por usuário (ex.: guia de primeiro acesso).
+
+    Tabela separada de propósito: create_all cria sem migração e novos flags
+    entram como colunas aqui sem tocar na tabela users.
+    """
+    __tablename__ = "user_flags"
+
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    tour_completed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )

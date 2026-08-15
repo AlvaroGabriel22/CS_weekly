@@ -163,8 +163,34 @@ class PptxLayoutRenderer:
             if not path or not Path(path).exists():
                 logger.warning("Imagem do layout não encontrada | attachment_id=%s", attachment_id)
                 return
+            # A imagem NUNCA é esticada/cortada: encaixa inteira dentro da
+            # caixa preservando a proporção, centralizada (regra "contain" —
+            # a mesma que o editor aplica na tela).
+            draw_left, draw_top, draw_w, draw_h = left, top, width, height
+            try:
+                from PIL import Image as PILImage
+
+                with PILImage.open(path) as img:
+                    img_w, img_h = img.size
+                if img_w > 0 and img_h > 0 and width > 0 and height > 0:
+                    img_ratio = img_w / img_h
+                    box_ratio = width / height
+                    if img_ratio > box_ratio:
+                        draw_w = width
+                        draw_h = width / img_ratio
+                    else:
+                        draw_h = height
+                        draw_w = height * img_ratio
+                    draw_left = left + (width - draw_w) / 2
+                    draw_top = top + (height - draw_h) / 2
+            except Exception as error:
+                logger.warning("Falha ao medir imagem (usa caixa cheia) | %s", error)
             slide.shapes.add_picture(
-                path, Inches(left), Inches(top), width=Inches(width), height=Inches(height)
+                path,
+                Inches(draw_left),
+                Inches(draw_top),
+                width=Inches(draw_w),
+                height=Inches(draw_h),
             )
             return
 
@@ -202,6 +228,8 @@ class PptxLayoutRenderer:
 
         size = Pt(float(element.get("font_size", 14)))
         bold = bool(element.get("bold", False))
+        italic = bool(element.get("italic", False))
+        font_name = str(element.get("font_family") or "Calibri")
         color = _hex_to_rgb(element.get("color"))
         align = _ALIGN.get(str(element.get("align") or "left"), PP_ALIGN.LEFT)
 
@@ -212,8 +240,9 @@ class PptxLayoutRenderer:
             run.text = f"• {line}" if bullet else line
             run.font.size = size
             run.font.bold = bold
+            run.font.italic = italic
             run.font.color.rgb = color
-            run.font.name = "Calibri"
+            run.font.name = font_name
 
     def _render_table(
         self,

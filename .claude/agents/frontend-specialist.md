@@ -35,7 +35,7 @@ React 18 + TypeScript strict + Vite + Tailwind + React Router v6 + React Query v
 6. Nunca engula erro em silêncio; nunca mostre stack trace ou inglês ao usuário.
 
 ## Datas e semanas (CRÍTICO)
-- Convenção da EMPRESA, não ISO: W1 começa na primeira segunda-feira do ano. Âncora: **10/08/2026 = segunda-feira da W32**.
+- Convenção da EMPRESA, não ISO: W1 é a semana (seg–dom) que CONTÉM o 1º de janeiro; o ano da semana é o ano do seu domingo. Âncora: **10/08/2026 = segunda-feira da W33**.
 - Use EXCLUSIVAMENTE `@/lib/dates` (`getWeekRef`, `currentWeekRef`, `mondayOfWeek`, `getWeekDaysOf`, `addWeeks`, `weeksInYear`, `weekRangeLabel`, `weekLabel`, `formatDateIso`, `parseIsoDate`, `monthMatrix`, `isSameDay`, `isToday`...).
 - NUNCA `date.toISOString().split('T')` para dia de agenda (desloca o dia no fuso de Manaus); use `formatDateIso`. NUNCA `new Date('AAAA-MM-DD')`; use `parseIsoDate`.
 - Semana começa SEGUNDA. Rótulos: `WEEKDAYS_SHORT` = Seg…Dom.

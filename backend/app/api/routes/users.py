@@ -27,14 +27,16 @@ def can_view_user_weeklys(viewer: User, owner: User) -> bool:
     """Regra de acesso a weeklys de outra pessoa.
 
     - Próprio usuário e admins: sempre.
-    - Cargos de gestão (MANAGEMENT_ROLES): todos os departamentos.
-    - Demais: apenas colegas do MESMO departamento.
+    - Cargos de gestão (MANAGEMENT_ROLES): todos os setores.
+    - Demais: apenas colegas do MESMO SETOR (sector: OQC, IQC, QA...).
+      NUNCA comparar `department` — é um rótulo genérico ("Qualidade")
+      igual para todos, o que liberaria acesso global indevido.
     """
     if viewer.id == owner.id or viewer.is_admin:
         return True
     if viewer.role in MANAGEMENT_ROLES:
         return True
-    return viewer.department == owner.department
+    return viewer.sector == owner.sector
 
 
 def _field_error(field: str, message: str, hint: str) -> HTTPException:
@@ -231,3 +233,38 @@ def save_slide_layout(
         db.add(pref)
     db.commit()
     return SlideLayoutResponse(layout=pref.layout)
+
+
+# ── Flags de experiência (guia de primeiro acesso) ─────────────────────────
+
+class UserFlagsResponse(BaseModel):
+    tour_completed: bool
+
+
+@router.get("/me/flags", response_model=UserFlagsResponse)
+def get_my_flags(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from app.models import UserFlags
+
+    flags = db.query(UserFlags).filter(UserFlags.user_id == current_user.id).first()
+    return UserFlagsResponse(tour_completed=bool(flags and flags.tour_completed_at))
+
+
+@router.post("/me/flags/tour-completed", response_model=UserFlagsResponse)
+def mark_tour_completed(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from datetime import UTC, datetime
+
+    from app.models import UserFlags
+
+    flags = db.query(UserFlags).filter(UserFlags.user_id == current_user.id).first()
+    if not flags:
+        flags = UserFlags(user_id=current_user.id)
+        db.add(flags)
+    flags.tour_completed_at = datetime.now(UTC)
+    db.commit()
+    return UserFlagsResponse(tour_completed=True)

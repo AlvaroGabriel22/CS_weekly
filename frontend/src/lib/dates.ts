@@ -3,11 +3,11 @@
  *
  * Regras:
  * - A semana começa na SEGUNDA-FEIRA.
- * - W1 do ano Y é a semana que começa na PRIMEIRA segunda-feira de janeiro de Y.
- * - Dias antes da primeira segunda (ex.: 01–04/jan/2026) pertencem à última
- *   semana do ano anterior.
+ * - W1 do ano Y é a semana (seg–dom) que CONTÉM o dia 1º de janeiro de Y —
+ *   mesmo que comece em dezembro do ano anterior.
+ * - O ano de uma semana é o ano do seu DOMINGO: 29/12/2025–04/01/2026 = W1/2026.
  *
- * Âncora de validação: 10/08/2026 é SEGUNDA-FEIRA da W32.
+ * Âncora de validação: 10/08/2026 é SEGUNDA-FEIRA da W33.
  * O backend usa a mesma regra em app/core/dates.py — mantenha os dois em sincronia.
  *
  * Todas as funções operam em datas LOCAIS (nunca toISOString em datas de agenda,
@@ -35,24 +35,21 @@ export function mondayOf(date: Date): Date {
   return d
 }
 
-/** Primeira segunda-feira de janeiro do ano (início da W1). */
+/** Segunda-feira da W1: a segunda da semana que CONTÉM 1º/jan (pode cair
+ *  em dezembro do ano anterior). Nome mantido por compatibilidade. */
 export function firstMonday(year: number): Date {
-  const jan1 = new Date(year, 0, 1)
-  const shift = (8 - jan1.getDay()) % 7
-  jan1.setDate(1 + shift)
-  return jan1
+  return mondayOf(new Date(year, 0, 1))
 }
 
 /** Semana (convenção da empresa) que contém a data. */
 export function getWeekRef(date: Date): WeekRef {
   const monday = mondayOf(date)
-  let year = monday.getFullYear()
-  let fm = firstMonday(year)
-  if (monday < fm) {
-    year -= 1
-    fm = firstMonday(year)
-  }
-  const week = Math.round((monday.getTime() - fm.getTime()) / (7 * DAY_MS)) + 1
+  // O ano da semana é o ano do DOMINGO: a semana que contém 1º/jan
+  // pertence ao ano novo (é a W1 dele).
+  const sunday = new Date(monday)
+  sunday.setDate(monday.getDate() + 6)
+  const year = sunday.getFullYear()
+  const week = Math.round((monday.getTime() - firstMonday(year).getTime()) / (7 * DAY_MS)) + 1
   return { year, week }
 }
 

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { ArrowLeft, CalendarDays, LogOut, Menu, Settings, User as UserIcon, X } from 'lucide-react'
+import { ArrowLeft, CalendarDays, CircleHelp, LogOut, Menu, Settings, User as UserIcon, X } from 'lucide-react'
+import { useTour } from '@/components/tour/tourContext'
+import { TOUR } from '@/i18n/messages/tour'
 import { useAuth } from '@/contexts/AuthContext'
 import { currentWeekRef, getWeekDaysOf, weekLabel, type WeekRef } from '@/lib/dates'
 import { Avatar } from '@/components/ui/avatar'
@@ -71,6 +73,24 @@ function weekRange(ref: WeekRef, locale: string): string {
   const days = getWeekDaysOf(ref)
   const fmt = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short' })
   return `${fmt.format(days[0])} – ${fmt.format(days[6])}`
+}
+
+/** Botão discreto para rever o guia de primeiro acesso. */
+function TourReplayButton() {
+  const { t } = useI18n()
+  const { start, active } = useTour()
+  return (
+    <button
+      type="button"
+      data-tour="tour-replay"
+      onClick={() => !active && start(false)}
+      aria-label={t(TOUR.replay)}
+      title={t(TOUR.replay)}
+      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
+    >
+      <CircleHelp className="h-5 w-5" aria-hidden />
+    </button>
+  )
 }
 
 function WeekChip() {
@@ -182,10 +202,13 @@ export function TopBar() {
           ))}
         </nav>
 
-        {/* Direita: semana atual + idioma + usuário */}
+        {/* Direita: semana atual + idioma + guia + usuário */}
         <div className="ml-auto flex min-w-0 items-center gap-1.5 sm:gap-2">
           <WeekChip />
-          <LanguageSwitcher variant="compact" />
+          <span data-tour="language">
+            <LanguageSwitcher variant="compact" />
+          </span>
+          <TourReplayButton />
 
           {user && (
             <DropdownMenu>

@@ -20,7 +20,7 @@ function ImageBox({ attachmentId }: { attachmentId?: string }) {
       </div>
     )
   }
-  return <img src={url} alt="" draggable={false} className="h-full w-full rounded-sm object-cover" />
+  return <img src={url} alt="" draggable={false} className="h-full w-full rounded-sm object-contain" />
 }
 
 function TableBox({ element, scale }: { element: SlideElement; scale: number }) {
@@ -127,7 +127,9 @@ function StaticElement({ element, scale }: { element: SlideElement; scale: numbe
       style={{
         ...style,
         fontSize: element.font_size * scale,
+        fontFamily: element.font_family ?? 'Calibri',
         fontWeight: element.bold ? 700 : 400,
+        fontStyle: element.italic ? 'italic' : 'normal',
         textAlign: element.align ?? 'left',
         color: element.color ?? COLORS.dark,
         lineHeight: 1.25,

@@ -36,11 +36,28 @@ export interface SlideElement {
   fill?: string | null
   stroke_width?: number
   font_size: number
+  /** Família tipográfica (web-safe e presente no PowerPoint). Padrão: Calibri. */
+  font_family?: string
   bold?: boolean
+  italic?: boolean
   align?: 'left' | 'center' | 'right'
   color?: string
   pinned?: boolean
 }
+
+/** Fontes oferecidas no editor — todas seguras na web E no PowerPoint. */
+export const FONT_FAMILIES = [
+  'Calibri',
+  'Arial',
+  'Verdana',
+  'Tahoma',
+  'Trebuchet MS',
+  'Georgia',
+  'Times New Roman',
+  'Courier New',
+] as const
+
+export const DEFAULT_FONT = 'Calibri'
 
 export type SlideKind = 'cover' | 'custom'
 

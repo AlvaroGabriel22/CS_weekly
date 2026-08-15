@@ -67,7 +67,7 @@ export function MonthCalendar({
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-card sm:p-5">
+    <div data-tour="calendar" className="rounded-xl border border-gray-200 bg-white p-4 shadow-card sm:p-5">
       {/* Cabeçalho: mês + chip da semana atual + navegação */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-0 flex-wrap items-center gap-2.5">
@@ -150,6 +150,7 @@ export function MonthCalendar({
                     key={formatDateIso(day)}
                     type="button"
                     onClick={() => onSelectDay(day)}
+                    {...(today ? { 'data-tour-today': '' } : {})}
                     aria-label={`${dayLabel}${hasActivities ? ` — ${t(AGENDA.withActivities)}` : ''}`}
                     aria-pressed={selected}
                     className={cn(

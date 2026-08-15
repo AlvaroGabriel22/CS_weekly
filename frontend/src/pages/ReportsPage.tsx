@@ -33,7 +33,7 @@ export function ReportsPage() {
 
   return (
     <PageContainer title={t(REPORTS.title)} maxWidth="full">
-      <Tabs value={tab} onValueChange={setTab}>
+      <Tabs data-tour="reports" value={tab} onValueChange={setTab}>
         <TabsList>
           <TabsTrigger value="gerar">
             <Sparkles className="h-4 w-4" aria-hidden="true" />

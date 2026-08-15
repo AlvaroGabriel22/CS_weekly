@@ -28,6 +28,7 @@ import {
   ArrowDown,
   ArrowUp,
   Bold,
+  Italic,
   ChevronsDown,
   ChevronsUp,
   Circle,
@@ -64,7 +65,9 @@ import { cn } from '@/lib/utils'
 import { useAttachmentImage } from '@/hooks/useSlideEditor'
 import {
   buildContentBlocks,
+  DEFAULT_FONT,
   DESIGN_WIDTH,
+  FONT_FAMILIES,
   elementFromBlock,
   newId,
   newShape,
@@ -153,7 +156,9 @@ function ImageContent({ attachmentId }: { attachmentId?: string }) {
       </div>
     )
   }
-  return <img src={url} alt="" draggable={false} className="h-full w-full rounded-sm object-cover" />
+  // object-contain: a imagem NUNCA corta — se a caixa tiver outra proporção,
+  // ela se encaixa inteira, centralizada (mesma regra aplicada no PPTX).
+  return <img src={url} alt="" draggable={false} className="h-full w-full rounded-sm object-contain" />
 }
 
 function TableContent({
@@ -259,7 +264,9 @@ function ElementContent({
 
   const style: CSSProperties = {
     fontSize: element.font_size * scale,
+    fontFamily: element.font_family ?? DEFAULT_FONT,
     fontWeight: element.bold ? 700 : 400,
+    fontStyle: element.italic ? 'italic' : 'normal',
     textAlign: element.align ?? 'left',
     color: element.color ?? COLORS.dark,
     lineHeight: 1.25,
@@ -893,6 +900,35 @@ export function SlideEditor({ deck, onChange, activities, onPinnedChange }: Slid
           <button type="button" className={toolButton} disabled={!isTextSelected} onClick={() => stepFont(1)} aria-label={t(REPORTS.fontLarger)} title={t(REPORTS.fontLarger)}>
             <Plus className="h-4 w-4" aria-hidden />
           </button>
+          {/* Família tipográfica (web-safe + PowerPoint) */}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              className={cn(toolButton, 'max-w-32')}
+              disabled={!isTextSelected}
+              aria-label={t(REPORTS.fontFamily)}
+              title={t(REPORTS.fontFamily)}
+            >
+              <span
+                className="truncate text-xs"
+                style={{ fontFamily: selected?.font_family ?? DEFAULT_FONT }}
+              >
+                {selected?.font_family ?? DEFAULT_FONT}
+              </span>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto">
+              {FONT_FAMILIES.map(family => (
+                <DropdownMenuItem
+                  key={family}
+                  onSelect={() => patchSelected({ font_family: family })}
+                  className={cn(
+                    (selected?.font_family ?? DEFAULT_FONT) === family && 'bg-brand-50 text-brand',
+                  )}
+                >
+                  <span style={{ fontFamily: family }}>{family}</span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
           <button
             type="button"
             className={cn(toolButton, selected?.bold && 'bg-brand-50 text-brand')}
@@ -903,6 +939,17 @@ export function SlideEditor({ deck, onChange, activities, onPinnedChange }: Slid
             title={t(REPORTS.bold)}
           >
             <Bold className="h-4 w-4" aria-hidden />
+          </button>
+          <button
+            type="button"
+            className={cn(toolButton, selected?.italic && 'bg-brand-50 text-brand')}
+            disabled={!isTextSelected}
+            onClick={() => patchSelected({ italic: !selected?.italic })}
+            aria-label={t(REPORTS.italic)}
+            aria-pressed={!!selected?.italic}
+            title={t(REPORTS.italic)}
+          >
+            <Italic className="h-4 w-4" aria-hidden />
           </button>
           {(
             [
@@ -1071,7 +1118,9 @@ export function SlideEditor({ deck, onChange, activities, onPinnedChange }: Slid
                     className="h-full w-full resize-none border-0 bg-blue-50/40 p-0 outline-none"
                     style={{
                       fontSize: element.font_size * scale,
+                      fontFamily: element.font_family ?? DEFAULT_FONT,
                       fontWeight: element.bold ? 700 : 400,
+                      fontStyle: element.italic ? 'italic' : 'normal',
                       textAlign: element.align ?? 'left',
                       color: element.color ?? COLORS.dark,
                       lineHeight: 1.25,

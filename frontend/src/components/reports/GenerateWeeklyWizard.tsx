@@ -342,6 +342,7 @@ export function GenerateWeeklyWizard({ initialWeek, onViewHistory }: GenerateWee
               variant="outline"
               disabled={selectedSet.size === 0 || deckDraft.isPending}
               onClick={requestAiDeck}
+              data-tour="ai-deck-btn"
               title={t(REPORTS.aiDeckHint)}
             >
               {deckDraft.isPending ? (
@@ -356,7 +357,7 @@ export function GenerateWeeklyWizard({ initialWeek, onViewHistory }: GenerateWee
                 </>
               )}
             </Button>
-            <Button size="lg" disabled={selectedSet.size === 0 || deckDraft.isPending} onClick={goToAssemble}>
+            <Button size="lg" data-tour="assemble-btn" disabled={selectedSet.size === 0 || deckDraft.isPending} onClick={goToAssemble}>
               {t(REPORTS.continueBtn)}
               <ChevronRight aria-hidden="true" />
             </Button>

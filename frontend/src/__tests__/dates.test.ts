@@ -18,37 +18,40 @@ import {
 
 /**
  * Convenção de semanas da EMPRESA (não ISO 8601):
- * W1 = semana que começa na primeira segunda-feira de janeiro.
- * Âncora oficial: 10/08/2026 é SEGUNDA-FEIRA da W32.
+ * W1 = semana (seg–dom) que CONTÉM o 1º de janeiro; o ano da semana é o
+ * ano do seu domingo (29/12/2025–04/01/2026 = W1/2026).
+ * Âncora oficial: 10/08/2026 é SEGUNDA-FEIRA da W33.
  */
 describe('Semanas — convenção da empresa', () => {
-  it('âncora: 10/08/2026 (segunda) está na W32 de 2026', () => {
+  it('âncora: 10/08/2026 (segunda) está na W33 de 2026', () => {
     const anchor = new Date(2026, 7, 10)
     expect(anchor.getDay()).toBe(1) // segunda-feira
-    expect(getWeekRef(anchor)).toEqual({ year: 2026, week: 32 })
-    expect(getWeekNumber(anchor)).toBe(32)
+    expect(getWeekRef(anchor)).toEqual({ year: 2026, week: 33 })
+    expect(getWeekNumber(anchor)).toBe(33)
   })
 
-  it('primeira segunda de 2026 é 05/01 e inicia a W1', () => {
+  it('a W1/2026 começa em 29/12/2025 (semana que contém 1º/jan)', () => {
     const fm = firstMonday(2026)
-    expect(formatDateIso(fm)).toBe('2026-01-05')
+    expect(formatDateIso(fm)).toBe('2025-12-29')
     expect(getWeekRef(fm)).toEqual({ year: 2026, week: 1 })
   })
 
-  it('dias antes da primeira segunda pertencem ao ano anterior', () => {
-    // 01–04/01/2026 vêm antes da primeira segunda → última semana de 2025
-    expect(getWeekRef(new Date(2026, 0, 4))).toEqual({ year: 2025, week: 52 })
-    expect(getWeekRef(new Date(2026, 0, 1))).toEqual({ year: 2025, week: 52 })
+  it('a semana que contém 1º/jan pertence INTEIRA ao ano novo', () => {
+    // 29/12/2025–04/01/2026 = W1/2026 (o ano da semana é o ano do domingo)
+    expect(getWeekRef(new Date(2026, 0, 1))).toEqual({ year: 2026, week: 1 })
+    expect(getWeekRef(new Date(2026, 0, 4))).toEqual({ year: 2026, week: 1 })
+    expect(getWeekRef(new Date(2025, 11, 29))).toEqual({ year: 2026, week: 1 })
+    expect(getWeekRef(new Date(2025, 11, 28))).toEqual({ year: 2025, week: 52 })
   })
 
   it('weeksInYear retorna 52 ou 53 conforme o calendário', () => {
     expect(weeksInYear(2025)).toBe(52)
     expect(weeksInYear(2026)).toBe(52)
-    expect(weeksInYear(2029)).toBe(53) // ano longo na convenção da empresa
+    expect(weeksInYear(2028)).toBe(53) // ano longo na convenção da empresa
   })
 
   it('mondayOfWeek é o inverso de getWeekRef', () => {
-    const monday = mondayOfWeek({ year: 2026, week: 32 })
+    const monday = mondayOfWeek({ year: 2026, week: 33 })
     expect(formatDateIso(monday)).toBe('2026-08-10')
     for (const week of [1, 20, 32, 52]) {
       expect(getWeekRef(mondayOfWeek({ year: 2026, week }))).toEqual({ year: 2026, week })
@@ -86,8 +89,8 @@ describe('getWeekDays / getWeekDaysOf', () => {
     expect(formatDateIso(days[6])).toBe('2026-09-06')
   })
 
-  it('getWeekDaysOf(W32/2026) começa em 10/08', () => {
-    const days = getWeekDaysOf({ year: 2026, week: 32 })
+  it('getWeekDaysOf(W33/2026) começa em 10/08', () => {
+    const days = getWeekDaysOf({ year: 2026, week: 33 })
     expect(formatDateIso(days[0])).toBe('2026-08-10')
     expect(formatDateIso(days[6])).toBe('2026-08-16')
   })
@@ -126,7 +129,7 @@ describe('formatação e parsing local (fuso de Manaus, UTC-4)', () => {
   })
 
   it('weekLabel produz "W32"', () => {
-    expect(weekLabel({ year: 2026, week: 32 })).toBe('W32')
+    expect(weekLabel({ year: 2026, week: 33 })).toBe('W33')
   })
 })
 

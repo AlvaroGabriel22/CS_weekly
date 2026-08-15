@@ -29,6 +29,7 @@ from app.models.postgres_models import (
     WeeklyReport,
     SlideLayoutPref,
     DepartmentRollup,
+    UserFlags,
     generate_uuid,
 )
 
@@ -68,6 +69,7 @@ __all__ = [
     "WeeklyReport",
     "SlideLayoutPref",
     "DepartmentRollup",
+    "UserFlags",
     # ACL Models
     "ActivityShare",
     "WeeklyPermission",
