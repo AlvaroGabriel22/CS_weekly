@@ -253,7 +253,7 @@ def get_attachment_file(
     if not attachment:
         raise NotFoundError("Attachment")
     owner = db.query(User).filter(User.id == attachment.activity.user_id).first()
-    if not owner or not can_view_user_weeklys(current_user, owner):
+    if not owner or not can_view_user_weeklys(current_user, owner, db):
         raise NotFoundError("Attachment")
     path = Path(attachment.file_path)
     if not path.exists():

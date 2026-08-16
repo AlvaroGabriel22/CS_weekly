@@ -89,4 +89,50 @@ export const PROFILE = defineMessages({
   unsavedChanges: { pt: 'Alterações não salvas.', en: 'Unsaved changes.', ko: '저장되지 않은 변경 사항' },
   allSaved: { pt: 'Tudo salvo.', en: 'All saved.', ko: '모두 저장됨' },
   discard: { pt: 'Descartar', en: 'Discard', ko: '되돌리기' },
+
+  // ── Configurações: abas ───────────────────────────────────────────────────
+  tabGeneral: { pt: 'Geral', en: 'General', ko: '일반' },
+  tabAccount: { pt: 'Conta', en: 'Account', ko: '계정' },
+  tabSharing: { pt: 'Compartilhamento', en: 'Sharing', ko: '공유' },
+
+  // ── Conta: mudança de cargo ───────────────────────────────────────────────
+  roleChangeTitle: { pt: 'Mudança de cargo', en: 'Role change', ko: '직책 변경' },
+  currentRole: { pt: 'Cargo atual', en: 'Current role', ko: '현재 직책' },
+  newRole: { pt: 'Novo cargo', en: 'New role', ko: '새 직책' },
+  roleRequired: { pt: 'Selecione um cargo.', en: 'Select a role.', ko: '직책을 선택하세요.' },
+  managementNotice: {
+    pt: 'Cargos de gestão passam a ver os weeklys de TODOS os departamentos imediatamente.',
+    en: 'Management roles immediately see everyone’s weeklys across all departments.',
+    ko: '관리자 직책은 즉시 모든 부서의 위클리를 볼 수 있습니다.',
+  },
+  changeRole: { pt: 'Mudar cargo', en: 'Change role', ko: '직책 변경' },
+  changingRole: { pt: 'Mudando…', en: 'Changing…', ko: '변경 중…' },
+  roleChanged: { pt: 'Cargo atualizado.', en: 'Role updated.', ko: '직책 변경 완료' },
+
+  // ── Compartilhamento: acesso aos meus weeklys ─────────────────────────────
+  grantsTitle: { pt: 'Acesso aos meus weeklys', en: 'Access to my weeklys', ko: '내 위클리 접근 권한' },
+  grantsHint: {
+    pt: 'Seu setor já tem acesso automático. Adicione exceções de outros setores — você decide quem entra ou sai.',
+    en: 'Your sector already has automatic access. Add exceptions from other sectors — you decide.',
+    ko: '같은 부문은 이미 자동으로 접근할 수 있습니다. 다른 부문의 예외만 추가하세요.',
+  },
+  employeeIdRequired: { pt: 'Informe a matrícula.', en: 'Enter the employee ID.', ko: '사번을 입력하세요.' },
+  grantAdded: { pt: 'Acesso concedido.', en: 'Access granted.', ko: '접근 허용 완료' },
+  grantRemoved: { pt: 'Acesso removido.', en: 'Access removed.', ko: '접근 해제 완료' },
+  grantsEmpty: { pt: 'Nenhuma exceção.', en: 'No exceptions.', ko: '예외 없음' },
+  removeAccess: { pt: 'Remover acesso de {name}', en: 'Remove access for {name}', ko: '{name} 접근 해제' },
+
+  // ── Compartilhamento: e-mails do weekly ───────────────────────────────────
+  emailsTitle: { pt: 'Lista de e-mails do weekly', en: 'Weekly email list', ko: '위클리 이메일 목록' },
+  emailsHint: {
+    pt: 'Pré-carregada ao clicar em "Enviar e-mail" na Central de Relatórios.',
+    en: 'Preloaded when you click "Send email" in Reports.',
+    ko: '보고서 센터에서 이메일을 보낼 때 자동으로 불러옵니다.',
+  },
+  emailRequired: { pt: 'Informe o e-mail.', en: 'Enter the email.', ko: '이메일을 입력하세요.' },
+  nameOptional: { pt: 'Nome (opcional)', en: 'Name (optional)', ko: '이름 (선택)' },
+  emailAdded: { pt: 'E-mail adicionado.', en: 'Email added.', ko: '이메일 추가 완료' },
+  emailRemoved: { pt: 'E-mail removido.', en: 'Email removed.', ko: '이메일 삭제 완료' },
+  emailsEmpty: { pt: 'Nenhum destinatário.', en: 'No recipients.', ko: '수신자 없음' },
+  removeEmail: { pt: 'Remover {email}', en: 'Remove {email}', ko: '{email} 삭제' },
 })

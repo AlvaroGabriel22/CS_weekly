@@ -690,3 +690,64 @@ async def generate_deck_draft(
         "duration_ms": duration_ms,
         "supplemented_slides": supplemented,
     }
+
+
+# ═════════════════════════ 3. SUGESTÃO DE E-MAIL DO WEEKLY ══════════════════
+
+EMAIL_LANG_NAMES = {"pt": "português do Brasil", "en": "inglês", "ko": "coreano"}
+
+EMAIL_SYSTEM = (
+    f"{QUALITY_DEPT_CONTEXT} "
+    "Você redige e-mails corporativos curtos e profissionais para envio do "
+    "relatório semanal (weekly) em anexo. Responda APENAS com JSON no formato "
+    '{"subject": "assunto conciso", "body": "corpo do e-mail com saudação, '
+    '1 parágrafo de contexto citando os destaques da semana e despedida"}. '
+    "Sem markdown; quebras de linha com \\n."
+)
+
+
+class EmailSuggestionRequest(BaseModel):
+    report_id: str
+    language: str = Field(default="pt", pattern="^(pt|en|ko)$")
+
+
+@router.post("/email-suggestion")
+async def suggest_email(
+    data: EmailSuggestionRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Sugere assunto + corpo do e-mail a partir do conteúdo do weekly."""
+    report = (
+        db.query(WeeklyReport)
+        .filter(WeeklyReport.id == data.report_id, WeeklyReport.user_id == current_user.id)
+        .first()
+    )
+    if not report:
+        raise HTTPException(404, detail="Weekly não encontrado.")
+
+    texts = _layout_texts((report.content or {}).get("layout"))
+    prompt = (
+        f"Escreva em {EMAIL_LANG_NAMES[data.language]}. "
+        f"Weekly W{report.week_number}/{report.year} de {current_user.name} "
+        f"(setor {current_user.sector.value}). Conteúdo dos slides:\n"
+        + "\n".join(f"- {t}" for t in texts[:40])
+    )
+
+    service = LLMService()
+    parsed: dict | None = None
+    try:
+        response = await service.generate(prompt, EMAIL_SYSTEM, json_mode=True)
+        parsed = _parse_json_object(response.content)
+        if parsed is None:
+            retry = await service.generate(prompt, EMAIL_SYSTEM, json_mode=True)
+            parsed = _parse_json_object(retry.content)
+    except Exception as error:
+        logger.warning("Sugestão de e-mail: LLM falhou | %s", error)
+
+    if not parsed or not str(parsed.get("subject") or "").strip():
+        raise HTTPException(503, detail="IA indisponível no momento. Tente novamente.")
+    return {
+        "subject": str(parsed.get("subject"))[:300].strip(),
+        "body": str(parsed.get("body") or "")[:5000].strip(),
+    }

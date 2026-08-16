@@ -110,9 +110,12 @@ export function parseApiError(err: unknown): NormalizedError {
     return { kind: 'notfound', message: detailMsg ?? 'Não encontrado.', fields: {}, status }
   }
   if (status >= 500) {
+    // 502/503 são erros operacionais que o backend emite de propósito com
+    // mensagem amigável (ex.: SMTP não configurado, IA indisponível).
+    const operational = (status === 502 || status === 503) && detailMsg
     return {
       kind: 'server',
-      message: 'Erro no servidor. Tente novamente em instantes.',
+      message: operational ? detailMsg : 'Erro no servidor. Tente novamente em instantes.',
       fields: {},
       status,
     }

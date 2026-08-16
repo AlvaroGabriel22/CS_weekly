@@ -101,8 +101,10 @@ class TestDateUtils:
         week_dec31, year_dec31 = calculate_week_number(dec31_2025)
         week_jan1, year_jan1 = calculate_week_number(jan1_2026)
 
-        assert year_dec31 == 2025
-        assert year_jan1 == 2026
+        # Convenção da empresa: 29/12/2025–04/01/2026 é a W1/2026
+        # (o ano da semana segue o domingo).
+        assert (week_dec31, year_dec31) == (1, 2026)
+        assert (week_jan1, year_jan1) == (1, 2026)
 
     def test_leap_year_feb_28_29(self):
         """Leap year deve ter Feb 29"""

@@ -405,3 +405,50 @@ class UserFlags(Base):
     tour_completed_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+
+class WeeklyAccessGrant(Base):
+    """Concessão PESSOAL de acesso aos weeklys do dono.
+
+    O dono (owner) escolhe, pela matrícula, colegas de OUTROS setores que
+    podem ver seus weeklys — além da regra padrão (mesmo setor / gestão).
+    Inserir e retirar é decisão exclusiva do dono.
+    """
+    __tablename__ = "weekly_access_grants"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    owner_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    grantee_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+    __table_args__ = (
+        UniqueConstraint("owner_id", "grantee_id", name="uq_grant_owner_grantee"),
+        Index("ix_grants_owner", "owner_id"),
+        Index("ix_grants_grantee", "grantee_id"),
+    )
+
+
+class EmailRecipient(Base):
+    """Lista pessoal de destinatários para envio do weekly por e-mail."""
+    __tablename__ = "email_recipients"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    email: Mapped[str] = mapped_column(String(255), nullable=False)
+    name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "email", name="uq_email_recipient"),
+        Index("ix_email_recipients_user", "user_id"),
+    )

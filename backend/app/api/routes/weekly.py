@@ -3,7 +3,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_current_user
@@ -86,7 +86,7 @@ def _get_report_for_viewer(report_id: str, current_user: User, db: Session) -> W
         raise NotFoundError("Weekly não encontrado")
 
     owner = db.query(User).filter(User.id == report.user_id).first()
-    if owner is None or not can_view_user_weeklys(current_user, owner):
+    if owner is None or not can_view_user_weeklys(current_user, owner, db):
         raise QWIException("Você não tem acesso a este weekly.", 403)
     return report
 
@@ -102,7 +102,7 @@ def list_user_weeklys(
     owner = db.query(User).filter(User.id == user_id).first()
     if not owner:
         raise NotFoundError("Usuário não encontrado")
-    if not can_view_user_weeklys(current_user, owner):
+    if not can_view_user_weeklys(current_user, owner, db):
         raise QWIException(
             "Você não tem acesso aos weeklys deste usuário. "
             "Apenas colegas do mesmo departamento ou cargos de gestão podem visualizar.",
@@ -222,3 +222,53 @@ def _serialize_report(report, db: Session) -> WeeklyReportResponse:
         if template:
             data.template = TemplateResponse.model_validate(template)
     return data
+
+
+# ── Envio do weekly por e-mail ─────────────────────────────────────────────
+
+class SendEmailRequest(BaseModel):
+    recipients: list[str] = Field(min_length=1, max_length=50)
+    subject: str = Field(min_length=1, max_length=300)
+    # Corpo opcional: sem texto, o e-mail vai só com o anexo e uma linha padrão.
+    body: str = Field(default="", max_length=10000)
+
+
+@router.post("/weekly/{report_id}/send-email")
+def send_weekly_email(
+    report_id: str,
+    data: SendEmailRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Envia o PPTX do weekly por e-mail (somente o DONO do relatório)."""
+    from app.services.email_service import EmailService
+
+    report = (
+        db.query(WeeklyReport)
+        .filter(WeeklyReport.id == report_id, WeeklyReport.user_id == current_user.id)
+        .first()
+    )
+    if not report:
+        raise NotFoundError("Weekly Report")
+    if not report.pptx_path or not Path(report.pptx_path).exists():
+        raise QWIException("Este weekly não possui arquivo PPTX para enviar.", 400)
+
+    service = EmailService()
+    if not service.is_configured():
+        raise QWIException(
+            "Envio de e-mail ainda não configurado (SMTP). Avise o administrador.",
+            503,
+        )
+    try:
+        service.send(
+            to=[r.strip() for r in data.recipients if r.strip()],
+            subject=data.subject.strip(),
+            body=data.body.strip()
+            or f"Weekly W{report.week_number}/{report.year} em anexo.",
+            attachment_path=report.pptx_path,
+            attachment_name=f"Weekly_W{report.week_number}_{report.year}_v{report.version}.pptx",
+            reply_to=current_user.email,
+        )
+    except Exception as error:
+        raise QWIException(f"Falha no envio do e-mail: {error}", 502)
+    return {"sent": True, "recipients": len(data.recipients)}

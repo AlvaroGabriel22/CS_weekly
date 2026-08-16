@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, Download, Monitor, MoreVertical, Presentation, RefreshCw, Sparkles } from 'lucide-react'
+import { ChevronDown, Download, Mail, Monitor, MoreVertical, Presentation, RefreshCw, Sparkles } from 'lucide-react'
 import type { WeekRef } from '@/lib/dates'
 import { parseApiError } from '@/lib/errors'
 import { useI18n, type Msg } from '@/i18n'
@@ -18,6 +18,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useToast } from '@/components/ui/toast'
 import { downloadWeeklyPptx, useWeeklyReports } from '@/hooks/useWeekly'
 import { DeckViewer, SlideViewer } from '@/components/weekly/SlideViewer'
+import { SendEmailDialog } from '@/components/reports/SendEmailDialog'
 import type { WeeklyReport } from '@/types'
 
 export interface HistoryTabProps {
@@ -120,6 +121,7 @@ function ReportCard({
   const { toast } = useToast()
   const [downloading, setDownloading] = useState(false)
   const [viewing, setViewing] = useState(false)
+  const [emailing, setEmailing] = useState(false)
   const status = statusMeta(report.status)
   const ready = report.status === 'completed' && Boolean(report.pptx_path)
   // Decks montados no editor têm o layout salvo → preview fiel página a página;
@@ -203,6 +205,10 @@ function ReportCard({
                 <Download aria-hidden="true" />
                 {t(REPORTS.downloadPptx)}
               </DropdownMenuItem>
+              <DropdownMenuItem disabled={!ready} onSelect={() => setEmailing(true)}>
+                <Mail aria-hidden="true" />
+                {t(REPORTS.sendEmail)}
+              </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={() => onRegenerate({ year: report.year, week: report.week_number })}
               >
@@ -234,6 +240,11 @@ function ReportCard({
         <DeckViewer report={report} layout={layout} open={viewing} onClose={() => setViewing(false)} />
       ) : (
         <SlideViewer report={report} open={viewing} onClose={() => setViewing(false)} />
+      )}
+
+      {/* Envio por e-mail com o .pptx anexado (lista pré-cadastrada em Configurações) */}
+      {emailing && (
+        <SendEmailDialog report={report} open={emailing} onClose={() => setEmailing(false)} />
       )}
     </div>
   )

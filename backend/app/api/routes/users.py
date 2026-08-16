@@ -2,7 +2,7 @@ import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_current_user
@@ -23,20 +23,37 @@ PHOTO_TYPES = {
 }
 
 
-def can_view_user_weeklys(viewer: User, owner: User) -> bool:
+def can_view_user_weeklys(viewer: User, owner: User, db: Session | None = None) -> bool:
     """Regra de acesso a weeklys de outra pessoa.
 
     - Próprio usuário e admins: sempre.
     - Cargos de gestão (MANAGEMENT_ROLES): todos os setores.
-    - Demais: apenas colegas do MESMO SETOR (sector: OQC, IQC, QA...).
+    - Demais: colegas do MESMO SETOR (sector: OQC, IQC, QA...).
       NUNCA comparar `department` — é um rótulo genérico ("Qualidade")
       igual para todos, o que liberaria acesso global indevido.
+    - Concessão pessoal: o DONO pode liberar colegas específicos de outros
+      setores pela matrícula (weekly_access_grants) — checada quando `db`
+      é fornecido.
     """
     if viewer.id == owner.id or viewer.is_admin:
         return True
     if viewer.role in MANAGEMENT_ROLES:
         return True
-    return viewer.sector == owner.sector
+    if viewer.sector == owner.sector:
+        return True
+    if db is not None:
+        from app.models import WeeklyAccessGrant
+
+        grant = (
+            db.query(WeeklyAccessGrant)
+            .filter(
+                WeeklyAccessGrant.owner_id == owner.id,
+                WeeklyAccessGrant.grantee_id == viewer.id,
+            )
+            .first()
+        )
+        return grant is not None
+    return False
 
 
 def _field_error(field: str, message: str, hint: str) -> HTTPException:
@@ -78,7 +95,7 @@ def get_organization(
             sector=u.sector.value,
             department=u.department,
             photo_url=u.photo_url,
-            viewer_can_access=can_view_user_weeklys(current_user, u),
+            viewer_can_access=can_view_user_weeklys(current_user, u, db),
         )
         for u in users
     ]
@@ -268,3 +285,209 @@ def mark_tour_completed(
     flags.tour_completed_at = datetime.now(UTC)
     db.commit()
     return UserFlagsResponse(tour_completed=True)
+
+
+# ── Concessões de acesso aos meus weeklys (por matrícula) ──────────────────
+
+class GrantRequest(BaseModel):
+    employee_id: str = Field(min_length=1, max_length=50)
+
+
+class GrantedUser(BaseModel):
+    id: str
+    name: str
+    employee_id: str
+    role: str
+    sector: str
+    photo_url: str | None
+
+
+def _granted_users(db: Session, owner_id: str) -> list[GrantedUser]:
+    from app.models import WeeklyAccessGrant
+
+    rows = (
+        db.query(User)
+        .join(WeeklyAccessGrant, WeeklyAccessGrant.grantee_id == User.id)
+        .filter(WeeklyAccessGrant.owner_id == owner_id)
+        .order_by(User.name)
+        .all()
+    )
+    return [
+        GrantedUser(
+            id=u.id, name=u.name, employee_id=u.employee_id,
+            role=u.role.value, sector=u.sector.value, photo_url=u.photo_url,
+        )
+        for u in rows
+    ]
+
+
+@router.get("/me/access-grants", response_model=list[GrantedUser])
+def list_access_grants(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return _granted_users(db, current_user.id)
+
+
+@router.post("/me/access-grants", response_model=list[GrantedUser])
+def add_access_grant(
+    data: GrantRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from app.models import WeeklyAccessGrant
+
+    target = (
+        db.query(User)
+        .filter(
+            User.employee_id == data.employee_id.strip(),
+            User.is_active.is_(True),
+        )
+        .first()
+    )
+    if not target:
+        raise _field_error(
+            "employee_id",
+            "Matrícula não encontrada.",
+            "Confira o número com o colega.",
+        )
+    if target.id == current_user.id:
+        raise _field_error(
+            "employee_id",
+            "Essa é a sua própria matrícula.",
+            "Informe a matrícula de um colega.",
+        )
+    exists = (
+        db.query(WeeklyAccessGrant)
+        .filter(
+            WeeklyAccessGrant.owner_id == current_user.id,
+            WeeklyAccessGrant.grantee_id == target.id,
+        )
+        .first()
+    )
+    if exists:
+        raise _field_error(
+            "employee_id",
+            "Este colega já tem acesso.",
+            "Confira a lista abaixo.",
+        )
+    db.add(WeeklyAccessGrant(owner_id=current_user.id, grantee_id=target.id))
+    db.commit()
+    return _granted_users(db, current_user.id)
+
+
+@router.delete("/me/access-grants/{user_id}", response_model=list[GrantedUser])
+def remove_access_grant(
+    user_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from app.models import WeeklyAccessGrant
+
+    db.query(WeeklyAccessGrant).filter(
+        WeeklyAccessGrant.owner_id == current_user.id,
+        WeeklyAccessGrant.grantee_id == user_id,
+    ).delete()
+    db.commit()
+    return _granted_users(db, current_user.id)
+
+
+# ── Mudança de cargo (promoção) — exige a senha do usuário ─────────────────
+
+class RoleChangeRequest(BaseModel):
+    role: str
+    password: str
+
+
+@router.put("/me/role", response_model=UserResponse)
+def change_my_role(
+    data: RoleChangeRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from app.models import UserRole
+
+    if not verify_password(data.password, current_user.hashed_password):
+        raise _field_error(
+            "password",
+            "Senha incorreta.",
+            "Confirme com a senha atual da sua conta.",
+        )
+    try:
+        new_role = UserRole(data.role)
+    except ValueError:
+        raise _field_error("role", "Cargo inválido.", "Selecione um cargo da lista.")
+    current_user.role = new_role
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+
+# ── Lista pessoal de destinatários de e-mail do weekly ─────────────────────
+
+class RecipientRequest(BaseModel):
+    email: EmailStr
+    name: str | None = Field(default=None, max_length=255)
+
+
+class RecipientResponse(BaseModel):
+    id: str
+    email: str
+    name: str | None
+
+
+def _recipients(db: Session, user_id: str) -> list[RecipientResponse]:
+    from app.models import EmailRecipient
+
+    rows = (
+        db.query(EmailRecipient)
+        .filter(EmailRecipient.user_id == user_id)
+        .order_by(EmailRecipient.email)
+        .all()
+    )
+    return [RecipientResponse(id=r.id, email=r.email, name=r.name) for r in rows]
+
+
+@router.get("/me/email-recipients", response_model=list[RecipientResponse])
+def list_email_recipients(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return _recipients(db, current_user.id)
+
+
+@router.post("/me/email-recipients", response_model=list[RecipientResponse])
+def add_email_recipient(
+    data: RecipientRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from app.models import EmailRecipient
+
+    email = data.email.lower().strip()
+    exists = (
+        db.query(EmailRecipient)
+        .filter(EmailRecipient.user_id == current_user.id, EmailRecipient.email == email)
+        .first()
+    )
+    if exists:
+        raise _field_error("email", "E-mail já cadastrado.", "Confira a lista abaixo.")
+    db.add(EmailRecipient(user_id=current_user.id, email=email, name=data.name))
+    db.commit()
+    return _recipients(db, current_user.id)
+
+
+@router.delete("/me/email-recipients/{recipient_id}", response_model=list[RecipientResponse])
+def remove_email_recipient(
+    recipient_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from app.models import EmailRecipient
+
+    db.query(EmailRecipient).filter(
+        EmailRecipient.user_id == current_user.id,
+        EmailRecipient.id == recipient_id,
+    ).delete()
+    db.commit()
+    return _recipients(db, current_user.id)

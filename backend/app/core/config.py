@@ -40,6 +40,21 @@ class Settings(BaseSettings):
     OLLAMA_NUM_CTX: int = 16384
     OLLAMA_NUM_PREDICT: int = 4096
 
+    # ── E-mail (SMTP) ──────────────────────────────────────────────────────
+    # Preencha no .env quando o servidor SMTP estiver disponível:
+    #   SMTP_HOST=smtp.empresa.com
+    #   SMTP_PORT=587
+    #   SMTP_USER=...            SMTP_PASSWORD=...
+    #   SMTP_FROM=qwi@empresa.com
+    # Sem SMTP_HOST, o envio responde 503 com mensagem clara — o restante do
+    # fluxo (lista de destinatários, sugestão da IA) funciona normalmente.
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = ""
+    SMTP_TLS: bool = True
+
     UPLOAD_DIR: str = "uploads"
     MAX_UPLOAD_SIZE_MB: int = 50
 

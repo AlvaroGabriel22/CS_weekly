@@ -8,6 +8,7 @@ import {
   Download,
   History,
   Loader2,
+  Mail,
   Paperclip,
   Sparkles,
 } from 'lucide-react'
@@ -32,6 +33,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { SendEmailDialog } from './SendEmailDialog'
 import { SlideEditor } from './SlideEditor'
 import { StepIndicator } from './StepIndicator'
 import { WeekPicker } from './WeekPicker'
@@ -59,6 +61,7 @@ export function GenerateWeeklyWizard({ initialWeek, onViewHistory }: GenerateWee
   // o conteúdo é 100% montado pelo usuário e traduzível pelo botão Traduzir).
   const language: 'pt' | 'en' = user?.writing_profile?.default_language === 'en' ? 'en' : 'pt'
   const [successReport, setSuccessReport] = useState<WeeklyReport | null>(null)
+  const [emailing, setEmailing] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const [messageIndex, setMessageIndex] = useState(0)
 
@@ -435,11 +438,22 @@ export function GenerateWeeklyWizard({ initialWeek, onViewHistory }: GenerateWee
                   <Download aria-hidden="true" />
                   {downloading ? t(REPORTS.downloading) : t(REPORTS.downloadPptx)}
                 </Button>
+                <Button size="lg" variant="outline" onClick={() => setEmailing(true)}>
+                  <Mail aria-hidden="true" />
+                  {t(REPORTS.sendEmail)}
+                </Button>
                 <Button size="lg" variant="outline" onClick={onViewHistory}>
                   <History aria-hidden="true" />
                   {t(REPORTS.viewHistory)}
                 </Button>
               </div>
+              {emailing && (
+                <SendEmailDialog
+                  report={successReport}
+                  open={emailing}
+                  onClose={() => setEmailing(false)}
+                />
+              )}
               <button
                 type="button"
                 onClick={resetWizard}
