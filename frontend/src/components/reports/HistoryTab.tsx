@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, Download, Mail, Monitor, MoreVertical, Presentation, RefreshCw, Sparkles } from 'lucide-react'
+import { ChevronDown, Download, Mail, Monitor, MoreVertical, Presentation, RefreshCw, Sparkles, Wand2 } from 'lucide-react'
 import type { WeekRef } from '@/lib/dates'
 import { parseApiError } from '@/lib/errors'
 import { useI18n, type Msg } from '@/i18n'
@@ -17,6 +17,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { useToast } from '@/components/ui/toast'
 import { downloadWeeklyPptx, useWeeklyReports } from '@/hooks/useWeekly'
+import { useAiStyle, useSetAiTemplate } from '@/hooks/useAi'
 import { DeckViewer, SlideViewer } from '@/components/weekly/SlideViewer'
 import { SendEmailDialog } from '@/components/reports/SendEmailDialog'
 import type { WeeklyReport } from '@/types'
@@ -122,6 +123,8 @@ function ReportCard({
   const [downloading, setDownloading] = useState(false)
   const [viewing, setViewing] = useState(false)
   const [emailing, setEmailing] = useState(false)
+  const aiStyle = useAiStyle()
+  const setTemplate = useSetAiTemplate()
   const status = statusMeta(report.status)
   const ready = report.status === 'completed' && Boolean(report.pptx_path)
   // Decks montados no editor têm o layout salvo → preview fiel página a página;
@@ -129,6 +132,17 @@ function ReportCard({
   const layout = report.content?.layout
   const hasLayout = Boolean(layout?.slides?.length)
   const canView = report.status === 'completed' && (hasLayout || Boolean(report.content))
+  const isAiTemplate = aiStyle.data?.template?.report_id === report.id
+
+  const toggleAiTemplate = () => {
+    setTemplate.mutate(
+      { reportId: isAiTemplate ? null : report.id },
+      {
+        onSuccess: () => toast.success(t(REPORTS.aiTemplateSaved)),
+        onError: (err) => toast.error(parseApiError(err).message),
+      }
+    )
+  }
 
   const handleDownload = async () => {
     setDownloading(true)
@@ -159,6 +173,12 @@ function ReportCard({
             <Badge variant="outline" className="uppercase">
               {report.language}
             </Badge>
+            {isAiTemplate && (
+              <Badge className="border-transparent bg-brand/10 text-brand">
+                <Wand2 className="mr-1 h-3 w-3" aria-hidden="true" />
+                {t(REPORTS.aiTemplateBadge)}
+              </Badge>
+            )}
           </div>
           <p className="mt-1 truncate text-xs text-gray-500">
             {report.title ?? 'Weekly Report'}
@@ -208,6 +228,13 @@ function ReportCard({
               <DropdownMenuItem disabled={!ready} onSelect={() => setEmailing(true)}>
                 <Mail aria-hidden="true" />
                 {t(REPORTS.sendEmail)}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={!hasLayout || setTemplate.isPending}
+                onSelect={toggleAiTemplate}
+              >
+                <Wand2 aria-hidden="true" />
+                {isAiTemplate ? t(REPORTS.aiTemplateUnset) : t(REPORTS.aiTemplateSet)}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={() => onRegenerate({ year: report.year, week: report.week_number })}

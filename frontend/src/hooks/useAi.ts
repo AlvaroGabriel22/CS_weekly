@@ -75,24 +75,83 @@ export function useGenerateRollup(sector: string, ref: WeekRef) {
   })
 }
 
+// ── Perfil de estilo + template do "Montar com IA" ──────────────────────────
+
+export interface AiTemplateInfo {
+  report_id: string
+  week_number: number
+  year: number
+  version: number
+}
+
+export interface AiStyleResponse {
+  /** Quantas montagens já alimentaram o aprendizado do padrão pessoal. */
+  sample_count: number
+  template: AiTemplateInfo | null
+  profile_summary: {
+    font: string | null
+    title_size: number | null
+    body_size: number | null
+    content_slides: number | null
+  } | null
+}
+
+const AI_STYLE_KEY = ['ai-style'] as const
+
+export function useAiStyle() {
+  return useQuery<AiStyleResponse>({
+    queryKey: AI_STYLE_KEY,
+    queryFn: async () => (await api.get('/ai/style')).data,
+    staleTime: 30_000,
+  })
+}
+
+/** Define/remove o weekly do histórico usado como modelo da IA. */
+export function useSetAiTemplate() {
+  const queryClient = useQueryClient()
+  return useMutation<AiStyleResponse, unknown, { reportId: string | null }>({
+    mutationFn: async ({ reportId }) =>
+      (await api.put('/ai/template', { report_id: reportId })).data,
+    onSuccess: data => queryClient.setQueryData(AI_STYLE_KEY, data),
+  })
+}
+
 // ── Deck em um clique ───────────────────────────────────────────────────────
 
 export interface DeckDraftResponse {
   layout: DeckLayout
-  /** "ai" = gerado pelo modelo; "fallback" = montagem determinística. */
-  source: 'ai' | 'fallback'
+  /**
+   * "ai" = gerado pelo modelo; "template" = clonagem determinística do modelo
+   * do usuário; "fallback" = montagem determinística padrão.
+   */
+  source: 'ai' | 'template' | 'fallback'
   model?: string | null
   duration_ms: number
+  used_template?: boolean
+  style_samples?: number
+}
+
+export interface DeckDraftInput {
+  ref: WeekRef
+  activityIds: string[]
+  /**
+   * undefined = usa o template ativo do usuário; 'none' = gerar sem modelo;
+   * um report_id = usar este weekly como modelo nesta geração.
+   */
+  templateChoice?: string | 'none'
 }
 
 export function useDeckDraft() {
-  return useMutation<DeckDraftResponse, unknown, { ref: WeekRef; activityIds: string[] }>({
-    mutationFn: async ({ ref, activityIds }) =>
+  return useMutation<DeckDraftResponse, unknown, DeckDraftInput>({
+    mutationFn: async ({ ref, activityIds, templateChoice }) =>
       (
         await api.post('/ai/deck-draft', {
           year: ref.year,
           week_number: ref.week,
           activity_ids: activityIds,
+          use_template: templateChoice !== 'none',
+          template_report_id:
+            templateChoice && templateChoice !== 'none' ? templateChoice : null,
         })
       ).data,
   })

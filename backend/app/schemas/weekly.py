@@ -40,6 +40,9 @@ class WeeklyGenerateRequest(BaseModel):
     # Layout do editor WYSIWYG de montagem (ver app/services/pptx_layout.py).
     # Quando presente, o PPTX é renderizado exatamente com essas posições.
     layout: dict | None = None
+    # Origem da montagem ("manual" | "ai"): montagens manuais pesam mais no
+    # aprendizado do padrão pessoal (style_learning).
+    layout_source: str = "manual"
 
 
 class CoverageMetrics(BaseModel):

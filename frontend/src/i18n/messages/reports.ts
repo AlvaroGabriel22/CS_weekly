@@ -170,4 +170,16 @@ export const REPORTS = defineMessages({
   emailSent: { pt: 'E-mail enviado para {n} destinatários.', en: 'Email sent to {n} recipients.', ko: '{n}명에게 이메일을 보냈습니다.' },
   emailNeedRecipient: { pt: 'Marque ao menos um destinatário.', en: 'Check at least one recipient.', ko: '받는 사람을 한 명 이상 선택하세요.' },
   emailNeedSubject: { pt: 'Escreva o título do e-mail.', en: 'Write the email subject.', ko: '이메일 제목을 입력하세요.' },
+
+  // IA especialista: modelo do histórico + padrão pessoal aprendido
+  aiTemplateLabel: { pt: 'Modelo a seguir', en: 'Template to follow', ko: '따를 템플릿' },
+  aiTemplateActive: { pt: 'Meu modelo · {week} v{version}', en: 'My template · {week} v{version}', ko: '내 템플릿 · {week} v{version}' },
+  aiTemplateNone: { pt: 'Sem modelo', en: 'No template', ko: '템플릿 없음' },
+  aiTemplateHint: { pt: 'A IA copia a estrutura do modelo e troca só o conteúdo da semana.', en: 'AI copies the template structure and swaps in this week’s content.', ko: 'AI가 템플릿 구조를 복사하고 이번 주 내용만 바꿉니다.' },
+  aiStyleLearned: { pt: 'Padrão pessoal: aprendido de {n} montagem(ns) sua(s).', en: 'Personal style: learned from {n} of your decks.', ko: '개인 스타일: 덱 {n}개에서 학습됨.' },
+  aiDeckFromTemplate: { pt: 'Montado com seu modelo (IA indisponível).', en: 'Built from your template (AI unavailable).', ko: '템플릿으로 구성됨 (AI 사용 불가).' },
+  aiTemplateSet: { pt: 'Usar como modelo da IA', en: 'Use as AI template', ko: 'AI 템플릿으로 사용' },
+  aiTemplateUnset: { pt: 'Remover modelo da IA', en: 'Remove AI template', ko: 'AI 템플릿 해제' },
+  aiTemplateBadge: { pt: 'Modelo da IA', en: 'AI template', ko: 'AI 템플릿' },
+  aiTemplateSaved: { pt: 'Modelo da IA atualizado.', en: 'AI template updated.', ko: 'AI 템플릿이 업데이트됨.' },
 })

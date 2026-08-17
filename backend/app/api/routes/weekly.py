@@ -51,6 +51,7 @@ async def generate_weekly(
         language=data.language,
         timezone=data.timezone,
         layout=data.layout,
+        layout_source=data.layout_source,
     )
     return _serialize_report(report, db)
 

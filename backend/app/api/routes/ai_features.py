@@ -36,10 +36,16 @@ from app.models import (
     QualitySector,
     SlideLayoutPref,
     User,
+    UserStyleProfile,
     WeeklyReport,
     WeeklyStatus,
 )
 from app.services.llm_service import LLMService, QUALITY_DEPT_CONTEXT
+from app.services.style_learning import (
+    apply_profile_style,
+    compact_layout,
+    style_rules_text,
+)
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -370,6 +376,10 @@ class DeckDraftRequest(BaseModel):
     year: int = Field(ge=2020, le=2100)
     week_number: int = Field(ge=1, le=53)
     activity_ids: list[str] = Field(min_length=1, max_length=100)
+    # Weekly do histórico para usar como modelo NESTA geração. None = usa o
+    # template ativo do usuário; use_template=False = gerar sem modelo.
+    template_report_id: str | None = None
+    use_template: bool = True
 
 
 def _deck_labels(user: User, year: int, week: int) -> tuple[str, str]:
@@ -426,6 +436,97 @@ def _deterministic_deck(
                 "w": 0.34, "h": 0.33, "font_size": 14,
             })
         slides.append({"id": f"s-a{idx}", "kind": "custom", "elements": elements})
+    return {"slides": slides}
+
+
+def _template_deck(
+    template: dict,
+    activities: list[Activity],
+    title: str,
+    subtitle: str,
+) -> dict:
+    """Deck determinístico que CLONA a estrutura do weekly-modelo do usuário.
+
+    Capa: a do template, com título/subtítulo da semana atual. Conteúdo: o
+    primeiro slide de conteúdo do template vira molde — cada atividade nova é
+    encaixada nele (título no lugar do título, descrição no maior bloco de
+    texto, tabela/imagem nos mesmos retângulos). Formas e textos decorativos
+    são mantidos como estão. Não depende do LLM: fidelidade garantida.
+    """
+    import copy
+
+    t_slides = template.get("slides") or []
+    cover_src = next((s for s in t_slides if s.get("kind") == "cover"), None)
+    molds = [s for s in t_slides if s.get("kind") != "cover" and s.get("elements")]
+
+    def texts_by_size(slide: dict) -> list[dict]:
+        return sorted(
+            [e for e in slide.get("elements", []) if e.get("type") == "text"],
+            key=lambda e: -(e.get("font_size") or 0),
+        )
+
+    slides: list[dict] = []
+    # capa do template com os rótulos da semana nova
+    if cover_src:
+        cover = copy.deepcopy(cover_src)
+        cover["id"] = "s-cover"
+        ordered = texts_by_size(cover)
+        if ordered:
+            ordered[0]["text"] = title
+        if len(ordered) > 1:
+            ordered[1]["text"] = subtitle
+        for i, el in enumerate(cover.get("elements", [])):
+            el["id"] = f"c-{i}"
+        slides.append(cover)
+    else:
+        slides.append({
+            "id": "s-cover", "kind": "cover",
+            "elements": [
+                _text_el("c-title", 0.06, 0.32, 0.88, 0.16, title, 40, True, BRAND),
+                _text_el("c-sub", 0.06, 0.5, 0.88, 0.08, subtitle, 18, False, GRAY),
+            ],
+        })
+
+    if not molds:
+        base = _deterministic_deck(activities, title, subtitle, [])
+        slides.extend(base["slides"][1:])
+        return {"slides": slides}
+
+    for idx, activity in enumerate(activities):
+        mold = copy.deepcopy(molds[min(idx, len(molds) - 1)])
+        mold["id"] = f"s-a{idx}"
+        mold["kind"] = "custom"
+        tables = [a for a in activity.attachments
+                  if isinstance(a.kpi_data, dict) and a.kpi_data.get("table")]
+        images = [a for a in activity.attachments
+                  if a.file_type == "image" or (a.mime_type or "").startswith("image/")]
+
+        ordered = texts_by_size(mold)
+        if ordered:
+            ordered[0]["text"] = activity.title
+        if len(ordered) > 1 and activity.description:
+            # maior bloco (área) entre os não-título recebe a descrição
+            body = max(ordered[1:], key=lambda e: (e.get("w") or 0) * (e.get("h") or 0))
+            body["text"] = activity.description
+
+        kept = []
+        for i, el in enumerate(mold.get("elements", [])):
+            el["id"] = f"a{idx}-{i}"
+            el.pop("pinned", None)
+            if el.get("type") == "table":
+                if tables:
+                    el["attachment_id"] = tables.pop(0).id
+                else:
+                    continue  # atividade sem tabela: remove o slot
+            elif el.get("type") == "image":
+                if images:
+                    el["attachment_id"] = images.pop(0).id
+                else:
+                    continue
+            kept.append(el)
+        mold["elements"] = kept
+        slides.append(mold)
+
     return {"slides": slides}
 
 
@@ -595,38 +696,50 @@ async def generate_deck_draft(
             "attachments": atts,
         })
 
-    # histórico: estilo dos últimos decks (nº de slides / composição)
-    history = (
-        db.query(WeeklyReport)
-        .filter(
-            WeeklyReport.user_id == current_user.id,
-            WeeklyReport.status == WeeklyStatus.COMPLETED,
-        )
-        .order_by(WeeklyReport.generated_at.desc())
-        .limit(3)
-        .all()
+    # ── padrão pessoal: template ativo + perfil de estilo aprendido ─────────
+    profile_row = (
+        db.query(UserStyleProfile)
+        .filter(UserStyleProfile.user_id == current_user.id)
+        .first()
     )
-    style_notes = []
-    for report in history:
-        layout = (report.content or {}).get("layout")
-        if isinstance(layout, dict) and layout.get("slides"):
-            style_notes.append({
-                "slides": len(layout["slides"]),
-                "composicao": [
-                    [el.get("type") for el in s.get("elements", [])]
-                    for s in layout["slides"][:6]
-                ],
-            })
+    profile = (profile_row.profile if profile_row else None) or {}
+    sample_count = profile_row.sample_count if profile_row else 0
+
+    template_layout: dict | None = None
+    if data.use_template:
+        template_id = data.template_report_id or (
+            profile_row.template_report_id if profile_row else None
+        )
+        if template_id:
+            template_report = (
+                db.query(WeeklyReport)
+                .filter(
+                    WeeklyReport.id == template_id,
+                    WeeklyReport.user_id == current_user.id,
+                )
+                .first()
+            )
+            candidate = ((template_report.content or {}).get("layout")
+                         if template_report else None)
+            if isinstance(candidate, dict) and candidate.get("slides"):
+                template_layout = candidate
+
+    style_block = ""
+    if template_layout:
+        style_block = (
+            "MODELO DO USUÁRIO — siga EXATAMENTE esta estrutura de slides "
+            "(mesmas posições, fontes, cores e ordem de elementos), apenas "
+            "substituindo os conteúdos pelos da semana atual:\n"
+            f"{json.dumps(compact_layout(template_layout), ensure_ascii=False)}\n"
+        )
+    if profile:
+        style_block += style_rules_text(profile) + "\n"
 
     prompt = (
         f"Capa: título \"{title}\", subtítulo \"{subtitle}\".\n"
         f"Dossiê da semana (uma entrada por atividade):\n"
         f"{json.dumps(dossier, ensure_ascii=False)}\n"
-        + (
-            f"Estilo dos decks anteriores deste usuário (imite a densidade):\n"
-            f"{json.dumps(style_notes, ensure_ascii=False)}\n"
-            if style_notes else ""
-        )
+        + style_block
         + "Gere o deck agora."
     )
 
@@ -650,8 +763,12 @@ async def generate_deck_draft(
     source = "ai"
     supplemented = 0
     if layout is None:
-        layout = _deterministic_deck(activities, title, subtitle, pinned)
-        source = "fallback"
+        if template_layout:
+            layout = _template_deck(template_layout, activities, title, subtitle)
+            source = "template"
+        else:
+            layout = _deterministic_deck(activities, title, subtitle, pinned)
+            source = "fallback"
     else:
         # Modelos fracos às vezes entregam só a capa: completa com slides
         # determinísticos das atividades que a IA deixou de fora.
@@ -673,14 +790,47 @@ async def generate_deck_draft(
             and not any(att.id in covered_atts for att in a.attachments)
         ]
         if missing:
-            extra = _deterministic_deck(missing, title, subtitle, [])
+            extra = (
+                _template_deck(template_layout, missing, title, subtitle)
+                if template_layout
+                else _deterministic_deck(missing, title, subtitle, [])
+            )
             layout["slides"].extend(extra["slides"][1:])  # sem a capa duplicada
             supplemented = len(extra["slides"]) - 1
 
+    if source == "ai":
+        # O LLM às vezes monta o slide da atividade só com os anexos: garante
+        # o título dela no topo do slide que contém seus attachments.
+        att_owner = {att.id: a for a in activities for att in a.attachments}
+        for slide in layout["slides"]:
+            if slide["kind"] == "cover":
+                continue
+            has_text = any(el["type"] == "text" for el in slide["elements"])
+            if has_text:
+                continue
+            owner = next(
+                (att_owner[el["attachment_id"]] for el in slide["elements"]
+                 if el.get("attachment_id") in att_owner),
+                None,
+            )
+            if owner:
+                top = min((el["y"] for el in slide["elements"]), default=1.0)
+                slide["elements"].insert(0, _text_el(
+                    f"{slide['id']}-title", 0.06, max(0.02, min(0.06, top - 0.12)),
+                    0.88, 0.1, owner.title, 24, True, BRAND,
+                ))
+
+    # Garantia final do padrão pessoal: aplica fonte/tamanhos/cores do perfil
+    # mesmo quando o LLM ignora as instruções de estilo.
+    if source == "ai" and profile:
+        layout = apply_profile_style(layout, profile, sample_count)
+
     duration_ms = int((time_mod.monotonic() - started) * 1000)
     logger.info(
-        "Deck-draft | user=%s W%d/%d | source=%s | %d slides (%d complementados) | %dms",
+        "Deck-draft | user=%s W%d/%d | source=%s | template=%s | perfil=%d amostras "
+        "| %d slides (%d complementados) | %dms",
         current_user.id, data.week_number, data.year, source,
+        bool(template_layout), sample_count,
         len(layout["slides"]), supplemented, duration_ms,
     )
     return {
@@ -689,7 +839,106 @@ async def generate_deck_draft(
         "model": model_name,
         "duration_ms": duration_ms,
         "supplemented_slides": supplemented,
+        "used_template": bool(template_layout),
+        "style_samples": sample_count,
     }
+
+
+# ══════════════ 2b. PERFIL DE ESTILO + TEMPLATE DO "MONTAR COM IA" ══════════
+
+def _style_response(row: UserStyleProfile | None, db: Session) -> dict:
+    template = None
+    if row and row.template_report_id:
+        report = (
+            db.query(WeeklyReport)
+            .filter(WeeklyReport.id == row.template_report_id)
+            .first()
+        )
+        if report:
+            template = {
+                "report_id": report.id,
+                "week_number": report.week_number,
+                "year": report.year,
+                "version": report.version,
+            }
+    profile = (row.profile if row else None) or {}
+    return {
+        "sample_count": row.sample_count if row else 0,
+        "template": template,
+        "profile_summary": {
+            "font": max(profile["fonts"], key=profile["fonts"].get)
+            if profile.get("fonts") else None,
+            "title_size": profile.get("title_size"),
+            "body_size": profile.get("body_size"),
+            "content_slides": profile.get("content_slides"),
+        } if profile else None,
+    }
+
+
+@router.get("/style")
+def get_style_profile(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Estado do aprendizado do usuário: amostras, template ativo e resumo."""
+    row = (
+        db.query(UserStyleProfile)
+        .filter(UserStyleProfile.user_id == current_user.id)
+        .first()
+    )
+    return _style_response(row, db)
+
+
+class SetTemplateRequest(BaseModel):
+    report_id: str | None = None  # None remove o modelo ativo
+
+
+@router.put("/template")
+def set_ai_template(
+    data: SetTemplateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Define (ou remove) o weekly do histórico usado como modelo da IA."""
+    if data.report_id is not None:
+        report = (
+            db.query(WeeklyReport)
+            .filter(
+                WeeklyReport.id == data.report_id,
+                WeeklyReport.user_id == current_user.id,
+            )
+            .first()
+        )
+        if report is None:
+            raise HTTPException(404, detail="Weekly não encontrado.")
+        layout = (report.content or {}).get("layout")
+        if not (isinstance(layout, dict) and layout.get("slides")):
+            raise HTTPException(
+                400,
+                detail={
+                    "field": "report_id",
+                    "message": "Este weekly não tem montagem salva.",
+                    "hint": "Escolha um weekly montado no editor (com layout).",
+                },
+            )
+
+    row = (
+        db.query(UserStyleProfile)
+        .filter(UserStyleProfile.user_id == current_user.id)
+        .first()
+    )
+    if row is None:
+        row = UserStyleProfile(user_id=current_user.id, profile={}, sample_count=0)
+        db.add(row)
+    row.template_report_id = data.report_id
+    row.updated_at = datetime.now(UTC)
+    db.commit()
+    logger.info(
+        "Template da IA %s | user=%s | report=%s",
+        "definido" if data.report_id else "removido",
+        current_user.id, data.report_id,
+    )
+    return _style_response(row, db)
 
 
 # ═════════════════════════ 3. SUGESTÃO DE E-MAIL DO WEEKLY ══════════════════

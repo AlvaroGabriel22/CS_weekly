@@ -30,3 +30,12 @@ flower==2.0.1
 # Chart generation and image processing
 matplotlib==3.8.2
 Pillow==10.1.0
+
+# HTTP client (LLM providers: Ollama / OpenAI-compatible)
+httpx==0.28.1
+
+# XLSX table extraction (attachments)
+openpyxl==3.1.5
+
+# Password hashing (auth)
+passlib==1.7.4

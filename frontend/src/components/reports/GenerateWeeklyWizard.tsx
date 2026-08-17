@@ -22,9 +22,14 @@ import { EmptyState, ErrorState } from '@/components/feedback'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useToast } from '@/components/ui/toast'
-import { downloadWeeklyPptx, useGenerateWeekly, useWeekActivities } from '@/hooks/useWeekly'
+import {
+  downloadWeeklyPptx,
+  useGenerateWeekly,
+  useWeekActivities,
+  useWeeklyReports,
+} from '@/hooks/useWeekly'
 import { useSaveSlideLayoutPrefs, useSlideLayoutPrefs } from '@/hooks/useSlideEditor'
-import { useDeckDraft } from '@/hooks/useAi'
+import { useAiStyle, useDeckDraft } from '@/hooks/useAi'
 import {
   Dialog,
   DialogContent,
@@ -157,17 +162,39 @@ export function GenerateWeeklyWizard({ initialWeek, onViewHistory }: GenerateWee
 
   // ── Deck em um clique (IA) — opcional, nunca bloqueia o fluxo manual ─────
   const deckDraft = useDeckDraft()
+  const aiStyle = useAiStyle()
+  const reportsQuery = useWeeklyReports()
   const [confirmAiDeck, setConfirmAiDeck] = useState(false)
+  // 'active' = modelo ativo do usuário; 'none' = sem modelo; id = weekly escolhido
+  const [templateChoice, setTemplateChoice] = useState<string>('active')
+  // Origem da montagem atual: manual pesa mais no aprendizado do padrão.
+  const [deckSource, setDeckSource] = useState<'manual' | 'ai'>('manual')
+
+  const activeTemplate = aiStyle.data?.template ?? null
+  /** Weeklys do histórico com montagem salva (candidatos a modelo). */
+  const templateOptions = useMemo(
+    () =>
+      (reportsQuery.data ?? []).filter(
+        (report) => report.content?.layout?.slides?.length
+      ),
+    [reportsQuery.data]
+  )
 
   const runAiDeck = () => {
     setConfirmAiDeck(false)
     deckDraft.mutate(
-      { ref: week, activityIds: selectedOrder ?? [] },
+      {
+        ref: week,
+        activityIds: selectedOrder ?? [],
+        templateChoice: templateChoice === 'active' ? undefined : templateChoice,
+      },
       {
         onSuccess: (result) => {
           setDeck(result.layout)
+          setDeckSource('ai')
           setStep(1)
           if (result.source === 'ai') toast.success(t(REPORTS.aiDeckDone))
+          else if (result.source === 'template') toast.info(t(REPORTS.aiDeckFromTemplate))
           else toast.info(t(REPORTS.aiDeckFallback))
         },
         onError: (err) => toast.error(parseApiError(err).message),
@@ -179,10 +206,8 @@ export function GenerateWeeklyWizard({ initialWeek, onViewHistory }: GenerateWee
   const deckHasWork =
     deck !== null && (deck.slides.length > 1 || deck.slides[0]?.elements.length > 2)
 
-  const requestAiDeck = () => {
-    if (deckHasWork) setConfirmAiDeck(true)
-    else runAiDeck()
-  }
+  // Sempre abre o diálogo: o usuário vê o modelo ativo e pode trocar na hora.
+  const requestAiDeck = () => setConfirmAiDeck(true)
 
   const generate = () => {
     generateMutation.mutate(
@@ -192,6 +217,7 @@ export function GenerateWeeklyWizard({ initialWeek, onViewHistory }: GenerateWee
         year: week.year,
         language,
         layout: deck ?? undefined,
+        layout_source: deckSource,
       },
       { onSuccess: (report) => setSuccessReport(report) }
     )
@@ -214,6 +240,7 @@ export function GenerateWeeklyWizard({ initialWeek, onViewHistory }: GenerateWee
     generateMutation.reset()
     setSuccessReport(null)
     setDeck(null)
+    setDeckSource('manual')
     setStep(0)
   }
 
@@ -533,13 +560,60 @@ export function GenerateWeeklyWizard({ initialWeek, onViewHistory }: GenerateWee
         </div>
       )}
 
-      {/* Confirmação antes de substituir trabalho manual pelo rascunho da IA */}
+      {/* Montar com IA: escolha do modelo a seguir + confirmação de substituição */}
       <Dialog open={confirmAiDeck} onOpenChange={setConfirmAiDeck}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{t(REPORTS.aiDeckReplace)}</DialogTitle>
-            <DialogDescription>{t(REPORTS.aiDeckReplaceHint)}</DialogDescription>
+            <DialogTitle>{t(REPORTS.aiDeck)}</DialogTitle>
+            <DialogDescription>
+              {deckHasWork ? t(REPORTS.aiDeckReplaceHint) : t(REPORTS.aiDeckHint)}
+            </DialogDescription>
           </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <label htmlFor="ai-template" className="text-sm font-medium text-gray-700">
+                {t(REPORTS.aiTemplateLabel)}
+              </label>
+              <select
+                id="ai-template"
+                value={templateChoice}
+                onChange={(e) => setTemplateChoice(e.target.value)}
+                className="h-10 w-full rounded-md border border-input bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                {activeTemplate ? (
+                  <option value="active">
+                    {t(REPORTS.aiTemplateActive, {
+                      week: `W${activeTemplate.week_number}/${activeTemplate.year}`,
+                      version: activeTemplate.version,
+                    })}
+                  </option>
+                ) : (
+                  <option value="active">{t(REPORTS.aiTemplateNone)}</option>
+                )}
+                {templateOptions
+                  .filter((report) => report.id !== activeTemplate?.report_id)
+                  .slice(0, 10)
+                  .map((report) => (
+                    <option key={report.id} value={report.id}>
+                      W{report.week_number}/{report.year} · v{report.version}
+                    </option>
+                  ))}
+                {activeTemplate && (
+                  <option value="none">{t(REPORTS.aiTemplateNone)}</option>
+                )}
+              </select>
+              <p className="text-xs text-gray-500">{t(REPORTS.aiTemplateHint)}</p>
+            </div>
+
+            {(aiStyle.data?.sample_count ?? 0) > 0 && (
+              <p className="flex items-center gap-1.5 text-xs text-brand">
+                <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                {t(REPORTS.aiStyleLearned, { n: aiStyle.data?.sample_count ?? 0 })}
+              </p>
+            )}
+          </div>
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmAiDeck(false)}>
               {t(COMMON.cancel)}

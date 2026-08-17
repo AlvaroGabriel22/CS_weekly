@@ -27,6 +27,8 @@ export interface GenerateWeeklyPayload {
   language: 'pt' | 'en'
   /** Layout do editor WYSIWYG — o PPTX é renderizado exatamente assim. */
   layout?: DeckLayout
+  /** Origem da montagem: manual pesa mais no aprendizado do padrão pessoal. */
+  layout_source?: 'manual' | 'ai'
 }
 
 interface ActivityListResponse {

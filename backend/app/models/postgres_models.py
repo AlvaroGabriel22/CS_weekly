@@ -365,6 +365,33 @@ class SlideLayoutPref(Base):
     )
 
 
+class UserStyleProfile(Base):
+    """Perfil de estilo de montagem aprendido POR USUÁRIO.
+
+    Alimentado automaticamente a cada PPT gerado com layout (montagens
+    manuais pesam mais que rascunhos da IA). O deck em um clique usa este
+    perfil + o template ativo (um weekly do histórico escolhido pelo dono)
+    para imitar o padrão individual de montagem.
+    """
+    __tablename__ = "user_style_profiles"
+
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    profile: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    sample_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Weekly do histórico marcado como "modelo da IA" (estrutura a imitar).
+    template_report_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("weekly_reports.id", ondelete="SET NULL"), nullable=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+
 class DepartmentRollup(Base):
     """Cache do 'weekly do departamento' gerado pela IA (copiloto do gestor).
 

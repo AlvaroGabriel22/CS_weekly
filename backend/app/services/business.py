@@ -490,6 +490,7 @@ class WeeklyService:
         language: Language | None = None,
         timezone: str | None = None,
         layout: dict | None = None,
+        layout_source: str = "manual",
     ) -> WeeklyReport:
         if start_date and end_date and start_date > end_date:
             start_date, end_date = end_date, start_date
@@ -677,6 +678,12 @@ class WeeklyService:
                 report.generated_at = datetime.now(UTC)
                 for activity in activities:
                     activity.status = ActivityStatus.USED_IN_REPORT
+
+                # Cada montagem gerada ensina o padrão pessoal do usuário
+                # (manual pesa mais que rascunho da IA; nunca falha a geração).
+                from app.services.style_learning import learn_from_layout
+                learn_from_layout(self.db, user.id, layout, source=layout_source)
+
                 self.db.commit()
                 self.db.refresh(report)
                 logger.info(
