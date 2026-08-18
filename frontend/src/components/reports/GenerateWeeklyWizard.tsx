@@ -64,7 +64,9 @@ export function GenerateWeeklyWizard({ initialWeek, onViewHistory }: GenerateWee
   const [deck, setDeck] = useState<DeckLayout | null>(null)
   // Idioma do registro do relatório (a UI de template/idioma saiu do MVP —
   // o conteúdo é 100% montado pelo usuário e traduzível pelo botão Traduzir).
-  const language: 'pt' | 'en' = user?.writing_profile?.default_language === 'en' ? 'en' : 'pt'
+  const defaultLanguage = user?.writing_profile?.default_language
+  const language: 'pt' | 'en' | 'ko' =
+    defaultLanguage === 'en' || defaultLanguage === 'ko' ? defaultLanguage : 'pt'
   const [successReport, setSuccessReport] = useState<WeeklyReport | null>(null)
   const [emailing, setEmailing] = useState(false)
   const [downloading, setDownloading] = useState(false)
@@ -455,6 +457,11 @@ export function GenerateWeeklyWizard({ initialWeek, onViewHistory }: GenerateWee
                   slides: totalSlides,
                 })}
               </p>
+              {successReport.ai_degraded && (
+                <p className="mt-3 inline-flex items-center rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-700">
+                  {t(REPORTS.aiDegraded)}
+                </p>
+              )}
               <div className="mt-6 flex flex-col justify-center gap-2 sm:flex-row">
                 <Button
                   size="lg"

@@ -2,7 +2,7 @@ import uuid
 from datetime import date
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Query, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, joinedload
 
@@ -20,10 +20,25 @@ from app.schemas.activity import (
     AttachmentUpdate,
 )
 from app.services.business import ActivityService, FileService
+from app.core.background import submit_background
 from app.services.ai_processor import (
     process_activity_in_background,
     process_attachment_in_background,
 )
+
+# Extensões aceitas em anexos de atividade. Planilhas e imagens têm extração
+# dedicada; documentos (pdf/doc/docx/txt) viram texto; apresentações são
+# armazenadas. Espelha FileService.ALLOWED_EXTENSIONS (QA-021).
+ALLOWED_ATTACHMENT_EXTS = {
+    ".xlsx", ".xls", ".csv", ".jpg", ".jpeg", ".png",
+    ".pdf", ".doc", ".docx", ".txt", ".pptx", ".ppt",
+}
+# Assinaturas (magic bytes) para validar imagens declaradas (QA-043).
+_IMAGE_MAGIC = {
+    ".png": [b"\x89PNG\r\n\x1a\n"],
+    ".jpg": [b"\xff\xd8\xff"],
+    ".jpeg": [b"\xff\xd8\xff"],
+}
 
 router = APIRouter(prefix="/activities", tags=["Activities"])
 settings = get_settings()
@@ -32,13 +47,14 @@ settings = get_settings()
 @router.post("", response_model=ActivityResponse, status_code=201)
 def create_activity(
     data: ActivityCreate,
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     service = ActivityService(db)
     activity = service.create(current_user, data.model_dump())
-    background_tasks.add_task(process_activity_in_background, activity.id)
+    # Enriquecimento de IA fora do request path, com concorrência limitada,
+    # para não esgotar o pool de conexões (QA-046).
+    submit_background(process_activity_in_background, activity.id)
     return _load_activity(db, activity.id)
 
 
@@ -109,7 +125,6 @@ def delete_activity(
 @router.post("/{activity_id}/attachments", response_model=ActivityResponse)
 async def upload_attachment(
     activity_id: str,
-    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -124,11 +139,23 @@ async def upload_attachment(
             f"Arquivo excede o limite de {settings.MAX_UPLOAD_SIZE_MB} MB",
             413,
         )
+    if len(content) == 0:
+        raise QWIException("Arquivo vazio. Selecione um arquivo válido.", 422)
     original = file.filename or "file"
     ext = original.rsplit(".", 1)[-1].lower() if "." in original else "bin"
-    if f".{ext}" not in {".xlsx", ".xls", ".csv", ".jpg", ".jpeg", ".png"}:
+    dot_ext = f".{ext}"
+    if dot_ext not in ALLOWED_ATTACHMENT_EXTS:
         raise QWIException(
-            "Tipo de arquivo não suportado. Use xlsx, xls, csv, jpg, jpeg ou png.",
+            "Tipo de arquivo não suportado. Use xlsx, xls, csv, jpg, jpeg, png, "
+            "pdf, doc, docx, txt, ppt ou pptx.",
+            422,
+        )
+    # Imagem declarada precisa ter os bytes de imagem (evita png de texto — QA-043).
+    if dot_ext in _IMAGE_MAGIC and not any(
+        content.startswith(sig) for sig in _IMAGE_MAGIC[dot_ext]
+    ):
+        raise QWIException(
+            "O arquivo não é uma imagem válida (conteúdo não corresponde à extensão).",
             422,
         )
     stored = f"{uuid.uuid4().hex[:12]}.{ext}"
@@ -150,9 +177,7 @@ async def upload_attachment(
         include_in_weekly=True,
     )
     if not is_image or analyze_images:
-        background_tasks.add_task(
-            process_attachment_in_background, attachment.id
-        )
+        submit_background(process_attachment_in_background, attachment.id)
 
     return _load_activity(db, activity.id)
 
@@ -174,7 +199,7 @@ def update_attachment(
         .first()
     )
     if not attachment:
-        raise NotFoundError("Attachment")
+        raise NotFoundError("Anexo")
 
     for key, value in data.model_dump(exclude_unset=True).items():
         if value is not None or isinstance(value, bool):
@@ -200,7 +225,7 @@ def delete_attachment(
         .first()
     )
     if not attachment:
-        raise NotFoundError("Attachment")
+        raise NotFoundError("Anexo")
 
     file_path = Path(attachment.file_path)
     if file_path.exists():
@@ -223,7 +248,7 @@ def _load_activity(db: Session, activity_id: str, user_id: str | None = None) ->
         query = query.filter(Activity.user_id == user_id)
     activity = query.first()
     if not activity:
-        raise QWIException("Activity not found", 404)
+        raise QWIException("Atividade não encontrada", 404)
     return _serialize_activity(activity)
 
 
@@ -251,13 +276,13 @@ def get_attachment_file(
         .first()
     )
     if not attachment:
-        raise NotFoundError("Attachment")
+        raise NotFoundError("Anexo")
     owner = db.query(User).filter(User.id == attachment.activity.user_id).first()
     if not owner or not can_view_user_weeklys(current_user, owner, db):
-        raise NotFoundError("Attachment")
+        raise NotFoundError("Anexo")
     path = Path(attachment.file_path)
     if not path.exists():
-        raise NotFoundError("Attachment file")
+        raise NotFoundError("Arquivo do anexo")
     return FileResponse(
         path=str(path),
         media_type=attachment.mime_type or "application/octet-stream",

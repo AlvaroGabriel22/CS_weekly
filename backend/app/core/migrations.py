@@ -37,10 +37,37 @@ def run_migrations() -> None:
                 ),
                 None,
             )
-            if template_column and not template_column["nullable"]:
+            # DROP NOT NULL só existe no Postgres — não roda no SQLite (QA-018).
+            if (
+                template_column
+                and not template_column["nullable"]
+                and engine.dialect.name == "postgresql"
+            ):
                 conn.execute(
                     text(
                         "ALTER TABLE weekly_reports "
                         "ALTER COLUMN template_id DROP NOT NULL"
                     )
                 )
+
+        # Índices que entraram no modelo depois da tabela existir; create_all
+        # não altera tabela existente, então criamos idempotente aqui (QA-008).
+        index_ddl = {
+            "weekly_reports": [
+                ("ix_weekly_reports_user_id", "user_id"),
+                ("ix_weekly_reports_week_number", "week_number"),
+                ("ix_weekly_reports_status", "status"),
+                ("ix_weekly_reports_user_year_week", "user_id, year, week_number"),
+                ("ix_weekly_reports_created_at_desc", "created_at"),
+            ],
+        }
+        for table, indexes in index_ddl.items():
+            if table not in existing_tables:
+                continue
+            for name, cols in indexes:
+                try:
+                    conn.execute(
+                        text(f"CREATE INDEX IF NOT EXISTS {name} ON {table} ({cols})")
+                    )
+                except Exception:
+                    pass  # índice já existe / dialeto sem IF NOT EXISTS — ignora

@@ -24,7 +24,7 @@ export interface GenerateWeeklyPayload {
   week_number: number
   year: number
   template_id?: string
-  language: 'pt' | 'en'
+  language: 'pt' | 'en' | 'ko'
   /** Layout do editor WYSIWYG — o PPTX é renderizado exatamente assim. */
   layout?: DeckLayout
   /** Origem da montagem: manual pesa mais no aprendizado do padrão pessoal. */

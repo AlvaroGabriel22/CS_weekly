@@ -11,7 +11,7 @@ from app.core.activity_directives import (
     activity_requests_image_analysis,
     parse_activity_directives,
 )
-from app.core.exceptions import NotFoundError, ValidationError
+from app.core.exceptions import NotFoundError, QWIException, ValidationError
 from app.models import (
     Activity,
     ActivityMetadata,
@@ -41,6 +41,20 @@ def get_week_info(dt: datetime | None = None) -> tuple[int, int]:
 
     dt = dt or datetime.now(UTC)
     return calculate_week_number(dt)
+
+
+def _layout_uses_ai(layout: dict | None) -> bool:
+    """True se algum elemento do layout tem `binding` (texto preenchido pela IA).
+
+    Um deck sem nenhum binding é 100% manual e não precisa do LLM (QA-037).
+    """
+    if not isinstance(layout, dict):
+        return False
+    for slide in layout.get("slides", []):
+        for element in slide.get("elements", []):
+            if isinstance(element, dict) and element.get("binding"):
+                return True
+    return False
 
 
 class ActivityService:
@@ -80,7 +94,7 @@ class ActivityService:
             .first()
         )
         if not activity:
-            raise NotFoundError("Activity")
+            raise NotFoundError("Atividade")
         return activity
 
     def list_activities(
@@ -130,8 +144,18 @@ class ActivityService:
         return activity
 
     def delete(self, activity: Activity) -> None:
+        # Remove os arquivos físicos dos anexos antes de apagar as linhas —
+        # o cascade do banco não limpa o disco (QA-004).
+        import shutil
+
+        activity_dir = Path(settings.UPLOAD_DIR) / str(activity.user_id) / str(activity.id)
         self.db.delete(activity)
         self.db.commit()
+        try:
+            if activity_dir.exists():
+                shutil.rmtree(activity_dir, ignore_errors=True)
+        except Exception:
+            logger.warning("Falha ao remover arquivos da atividade %s", activity.id)
 
     async def process_activity_metadata(self, activity: Activity) -> None:
         """Process activity through AI to extract structured metadata."""
@@ -537,18 +561,46 @@ class WeeklyService:
         )
         version = (existing.version + 1) if existing else 1
 
-        report = WeeklyReport(
-            user_id=user.id,
-            template_id=None,
-            week_number=week_number,
-            year=year,
-            language=lang,
-            version=version,
-            status=WeeklyStatus.GENERATING,
-            title=self._build_report_title(start_date, end_date, week_number, year, lang),
-        )
-        self.db.add(report)
-        self.db.commit()
+        # Duas gerações concorrentes da mesma semana disputam a mesma `version`
+        # e colidem no UNIQUE(user,year,week,version). Re-tenta com a próxima
+        # versão em vez de estourar 500 (QA-042).
+        from sqlalchemy.exc import IntegrityError
+
+        report = None
+        for _ in range(5):
+            candidate = WeeklyReport(
+                user_id=user.id,
+                template_id=None,
+                week_number=week_number,
+                year=year,
+                language=lang,
+                version=version,
+                status=WeeklyStatus.GENERATING,
+                title=self._build_report_title(start_date, end_date, week_number, year, lang),
+            )
+            self.db.add(candidate)
+            try:
+                self.db.commit()
+                report = candidate
+                break
+            except IntegrityError:
+                self.db.rollback()
+                latest = (
+                    self.db.query(WeeklyReport.version)
+                    .filter(
+                        WeeklyReport.user_id == user.id,
+                        WeeklyReport.week_number == week_number,
+                        WeeklyReport.year == year,
+                    )
+                    .order_by(WeeklyReport.version.desc())
+                    .first()
+                )
+                version = (latest[0] + 1) if latest else version + 1
+        if report is None:
+            raise QWIException(
+                "Não foi possível gerar o relatório agora (concorrência). Tente novamente.",
+                409,
+            )
 
         try:
             await self._ensure_attachments_analyzed(activities)
@@ -581,24 +633,39 @@ class WeeklyService:
                 )
                 return plan.user_prompt, plan.system_prompt
 
+            # Layout presente mas sem slides usáveis → trata como sem layout
+            # (cai no fluxo de IA em vez de estourar ValueError — QA-030).
+            if layout is not None and not (
+                isinstance(layout, dict) and layout.get("slides")
+            ):
+                layout = None
+
             ai_degraded = False
-            try:
-                content = await self.llm.generate_weekly_content(
-                    composed.user_prompt,
-                    composed.system_prompt,
-                    build_plan_prompt,
-                )
-                structured = self._parse_weekly_content(content)
-                if not structured.get("summary"):
-                    raise ValueError("AI response did not contain a summary")
-            except Exception as error:
-                logger.warning(
-                    "LLM unavailable; generating deterministic weekly | error=%s",
-                    error,
-                )
-                ai_degraded = True
-                structured = self._build_fallback_content(activities, lang)
-                content = json.dumps(structured, ensure_ascii=False)
+            if layout is not None and not _layout_uses_ai(layout):
+                # Deck 100% manual (nenhum bloco com binding de IA): não há o que
+                # a IA preencher → pula a chamada ao LLM. Geração instantânea e
+                # fora do gargalo de IA (QA-037).
+                structured = {}
+                content = "{}"
+                logger.info("Weekly manual sem bindings de IA — LLM ignorado")
+            else:
+                try:
+                    content = await self.llm.generate_weekly_content(
+                        composed.user_prompt,
+                        composed.system_prompt,
+                        build_plan_prompt,
+                    )
+                    structured = self._parse_weekly_content(content)
+                    if not structured.get("summary"):
+                        raise ValueError("AI response did not contain a summary")
+                except Exception as error:
+                    logger.warning(
+                        "LLM unavailable; generating deterministic weekly | error=%s",
+                        error,
+                    )
+                    ai_degraded = True
+                    structured = self._build_fallback_content(activities, lang)
+                    content = json.dumps(structured, ensure_ascii=False)
 
             if layout:
                 # Layout do editor WYSIWYG: renderiza exatamente as posições

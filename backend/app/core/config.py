@@ -8,9 +8,18 @@ class Settings(BaseSettings):
 
     APP_NAME: str = "Quality Weekly Intelligence"
     APP_VERSION: str = "0.1.0"
-    DEBUG: bool = True
+    # DEBUG liga o echo de SQL (verboso). Default seguro = desligado; ligue no
+    # .env só quando precisar depurar consultas.
+    DEBUG: bool = False
 
     DATABASE_URL: str = "postgresql://qwi:qwi_secret@localhost:5432/qwi_db"
+    # Nº máximo de tarefas de IA em background rodando ao mesmo tempo. Cada uma
+    # segura 1 conexão do banco enquanto chama o LLM; manter baixo evita esgotar
+    # o pool web (o LLM local serializa de qualquer forma). Ver QA-046.
+    BACKGROUND_AI_WORKERS: int = 2
+    # Retenção de PPTX por (usuário, ano, semana): mantém as N versões mais
+    # recentes no disco; 0 = nunca limpar. Ver QA-010.
+    PPTX_RETENTION_PER_WEEK: int = 5
 
     SECRET_KEY: str = "change-me-in-production-use-a-long-random-string"
     ALGORITHM: str = "HS256"

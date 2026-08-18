@@ -44,6 +44,7 @@ def EnumCol(enum_cls):
 class Language(str, enum.Enum):
     PT = "pt"
     EN = "en"
+    KO = "ko"
 
 
 class WritingTone(str, enum.Enum):

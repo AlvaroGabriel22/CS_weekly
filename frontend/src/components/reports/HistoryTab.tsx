@@ -179,6 +179,11 @@ function ReportCard({
                 {t(REPORTS.aiTemplateBadge)}
               </Badge>
             )}
+            {report.ai_degraded && (
+              <Badge className="border-transparent bg-amber-100 text-amber-700">
+                {t(REPORTS.aiDegraded)}
+              </Badge>
+            )}
           </div>
           <p className="mt-1 truncate text-xs text-gray-500">
             {report.title ?? 'Weekly Report'}

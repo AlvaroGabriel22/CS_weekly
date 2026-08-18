@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api.routes import activities, ai_features, auth, translate, users, weekly, pptx
+from app.api.routes import activities, ai_features, auth, translate, users, weekly
 from app.core.config import get_settings
 from app.core.database import Base, engine
 from app.core.exceptions import QWIException
@@ -70,7 +70,6 @@ def create_app() -> FastAPI:
     app.include_router(weekly.router, prefix="/api")
     app.include_router(translate.router, prefix="/api")
     app.include_router(ai_features.router, prefix="/api")
-    app.include_router(pptx.router)
 
     # Arquivos enviados (fotos de perfil etc.) servidos estaticamente
     uploads_dir = Path("uploads")
@@ -82,9 +81,34 @@ def create_app() -> FastAPI:
         Base.metadata.create_all(bind=engine)
         run_migrations()
         seed_default_template()
+        # Limpeza de PPTX antigos por (usuário, semana) — evita crescimento
+        # indefinido de uploads/reports (QA-010).
+        from app.services.retention import cleanup_old_reports
+        cleanup_old_reports()
+
+    @app.on_event("shutdown")
+    def on_shutdown():
+        from app.core.background import shutdown_background
+        shutdown_background()
 
     @app.get("/api/health")
-    def health():
+    def health(deep: bool = False):
+        """Liveness simples; `?deep=1` também testa uma conexão do banco, para
+        refletir a saúde real do pool (QA-047)."""
+        if deep:
+            from sqlalchemy import text
+            from app.core.database import SessionLocal
+            db = SessionLocal()
+            try:
+                db.execute(text("SELECT 1"))
+            except Exception:
+                return JSONResponse(
+                    status_code=503,
+                    content={"status": "degraded", "db": "unavailable",
+                             "version": settings.APP_VERSION},
+                )
+            finally:
+                db.close()
         return {"status": "healthy", "version": settings.APP_VERSION}
 
     return app

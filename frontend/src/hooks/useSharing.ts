@@ -35,8 +35,8 @@ export function useAddAccessGrant() {
       (await api.post('/users/me/access-grants', { employee_id: employeeId })).data,
     onSuccess: list => {
       queryClient.setQueryData(GRANTS_KEY, list)
-      // cadeados do organograma podem mudar para o colega — invalida por via das dúvidas
-      queryClient.invalidateQueries({ queryKey: ['org-users'], refetchType: 'none' })
+      // cadeados do organograma podem mudar para o colega — refetch imediato
+      queryClient.invalidateQueries({ queryKey: ['org', 'users'] })
     },
   })
 }

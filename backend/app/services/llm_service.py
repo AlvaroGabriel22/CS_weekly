@@ -87,12 +87,20 @@ class OllamaProvider(LLMProvider):
             data = response.json()
 
         content = data.get("message", {}).get("content", "")
+        finish = data.get("done_reason")
         logger.info("LLM response generated | model=%s | length=%d", self.model, len(content))
+        if finish == "length":
+            # Resposta cortada por limite de tokens — o JSON pode vir inválido e
+            # cair no fallback silenciosamente. Alerta para diagnóstico (QA-033).
+            logger.warning(
+                "LLM truncou a resposta (done_reason=length) | model=%s | "
+                "considere aumentar OLLAMA_NUM_PREDICT/NUM_CTX", self.model,
+            )
 
         return LLMResponse(
             content=content,
             model=self.model,
-            finish_reason=data.get("done_reason"),
+            finish_reason=finish,
         )
 
     async def is_available(self) -> bool:
@@ -170,6 +178,11 @@ class OpenAICompatProvider(LLMProvider):
             "LLM response generated | provider=openai_compat | model=%s | length=%d",
             self.model, len(content),
         )
+        if choice.get("finish_reason") == "length":
+            logger.warning(
+                "LLM truncou a resposta (finish_reason=length) | model=%s (QA-033)",
+                self.model,
+            )
         return LLMResponse(
             content=content,
             model=data.get("model", self.model),

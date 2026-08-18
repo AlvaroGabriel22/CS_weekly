@@ -182,4 +182,5 @@ export const REPORTS = defineMessages({
   aiTemplateUnset: { pt: 'Remover modelo da IA', en: 'Remove AI template', ko: 'AI 템플릿 해제' },
   aiTemplateBadge: { pt: 'Modelo da IA', en: 'AI template', ko: 'AI 템플릿' },
   aiTemplateSaved: { pt: 'Modelo da IA atualizado.', en: 'AI template updated.', ko: 'AI 템플릿이 업데이트됨.' },
+  aiDegraded: { pt: 'Gerado sem IA', en: 'Generated without AI', ko: 'AI 없이 생성됨' },
 })

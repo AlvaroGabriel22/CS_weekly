@@ -6,8 +6,13 @@ class QWIException(Exception):
 
 
 class NotFoundError(QWIException):
-    def __init__(self, resource: str = "Resource"):
-        super().__init__(f"{resource} not found", status_code=404)
+    def __init__(self, resource: str = "Recurso"):
+        # Aceita tanto o nome do recurso ("Weekly") quanto uma mensagem já
+        # pronta ("Weekly não encontrado"): se já tem espaço, usa como está —
+        # evita o "... não encontrado not found" duplicado (QA-038).
+        text = resource.strip()
+        message = text if " " in text else f"{text} não encontrado"
+        super().__init__(message, status_code=404)
 
 
 class UnauthorizedError(QWIException):

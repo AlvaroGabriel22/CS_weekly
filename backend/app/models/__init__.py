@@ -37,16 +37,6 @@ from app.models.postgres_models import (
 )
 
 # Import ACL models
-from app.models.permissions import (
-    PermissionLevel,
-    AccessScope,
-    ActivityShare,
-    WeeklyPermission,
-    FileShare,
-    AuditLog,
-    PermissionChange,
-    DepartmentRole,
-)
 
 __all__ = [
     # Enums
@@ -60,8 +50,6 @@ __all__ = [
     "QualitySector",
     "UserRole",
     "MANAGEMENT_ROLES",
-    "PermissionLevel",
-    "AccessScope",
     # Core Models
     "User",
     "WritingProfile",
@@ -76,13 +64,6 @@ __all__ = [
     "UserFlags",
     "WeeklyAccessGrant",
     "EmailRecipient",
-    # ACL Models
-    "ActivityShare",
-    "WeeklyPermission",
-    "FileShare",
-    "AuditLog",
-    "PermissionChange",
-    "DepartmentRole",
     # Functions
     "generate_uuid",
 ]

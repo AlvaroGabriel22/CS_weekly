@@ -81,6 +81,9 @@ class WeeklyReportResponse(BaseModel):
     generated_at: datetime | None
     created_at: datetime
     template: TemplateResponse | None = None
+    # True quando o deck foi montado sem a IA (fallback determinístico) — a UI
+    # pode avisar "gerado sem IA" (QA-022).
+    ai_degraded: bool = False
 
     model_config = {"from_attributes": True}
 

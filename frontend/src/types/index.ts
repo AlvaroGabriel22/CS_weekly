@@ -13,7 +13,7 @@ export interface User {
 }
 
 export interface WritingProfile {
-  default_language: 'pt' | 'en'
+  default_language: 'pt' | 'en' | 'ko'
   default_template_id: string | null
   writing_tone: string
   objectivity: string
@@ -117,6 +117,8 @@ export interface WeeklyReport {
   generated_at: string | null
   created_at: string
   template?: Template | null
+  /** true quando o deck foi gerado sem IA (fallback degradado). */
+  ai_degraded?: boolean
 }
 
 export interface CoverageMetrics {

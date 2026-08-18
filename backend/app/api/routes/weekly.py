@@ -214,6 +214,8 @@ def _serialize_report(report, db: Session) -> WeeklyReportResponse:
     from app.schemas.weekly import CoverageMetrics, ConfidenceSlide, TemplateResponse
 
     data = WeeklyReportResponse.model_validate(report)
+    if isinstance(report.content, dict):
+        data.ai_degraded = bool(report.content.get("ai_degraded"))
     if report.coverage:
         data.coverage = CoverageMetrics(**report.coverage)
     if report.confidence_index:
@@ -271,5 +273,13 @@ def send_weekly_email(
             reply_to=current_user.email,
         )
     except Exception as error:
-        raise QWIException(f"Falha no envio do e-mail: {error}", 502)
+        # Loga o detalhe técnico, mas devolve mensagem PT genérica (não expõe
+        # o erro interno ao usuário — QA-045).
+        import logging
+        logging.getLogger(__name__).warning("Falha SMTP no envio: %s", error)
+        raise QWIException(
+            "Não foi possível enviar o e-mail. Verifique a configuração do "
+            "servidor de e-mail (SMTP) com o administrador.",
+            502,
+        )
     return {"sent": True, "recipients": len(data.recipients)}

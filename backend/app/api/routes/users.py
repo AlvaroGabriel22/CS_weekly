@@ -192,7 +192,7 @@ def update_profile(
 def get_writing_profile(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     profile = db.query(WritingProfile).filter(WritingProfile.user_id == current_user.id).first()
     if not profile:
-        raise QWIException("Writing profile not found", 404)
+        raise QWIException("Perfil de escrita não encontrado", 404)
     return profile
 
 
@@ -204,7 +204,7 @@ def update_writing_profile(
 ):
     profile = db.query(WritingProfile).filter(WritingProfile.user_id == current_user.id).first()
     if not profile:
-        raise QWIException("Writing profile not found", 404)
+        raise QWIException("Perfil de escrita não encontrado", 404)
 
     for key, value in data.model_dump(exclude_unset=True).items():
         setattr(profile, key, value)

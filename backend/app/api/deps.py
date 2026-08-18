@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException, status, Request
+from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session, joinedload
 
@@ -6,19 +6,22 @@ from app.core.database import get_db
 from app.core.exceptions import UnauthorizedError
 from app.core.security import decode_access_token
 from app.models import User, WritingProfile, QualitySector, UserRole, MANAGEMENT_ROLES
-from app.repositories.permission_repo import PermissionRepository
-from app.services.permission_service import PermissionService
 
-security = HTTPBearer()
+# auto_error=False: sem header não levanta 403 automático — devolvemos 401
+# explícito para "não autenticado", que é o que o frontend usa para redirecionar
+# ao login (QA-040).
+security = HTTPBearer(auto_error=False)
 
 
 def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
     db: Session = Depends(get_db),
 ) -> User:
+    if credentials is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Não autenticado")
     payload = decode_access_token(credentials.credentials)
     if not payload or not payload.get("sub"):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token inválido")
 
     user = (
         db.query(User)
@@ -27,7 +30,7 @@ def get_current_user(
         .first()
     )
     if not user or not user.is_active:
-        raise UnauthorizedError("User not found or inactive")
+        raise UnauthorizedError("Usuário não encontrado ou inativo")
     return user
 
 
@@ -43,40 +46,6 @@ def get_current_admin_user(
     return current_user
 
 
-def get_permission_repo(db: Session = Depends(get_db)) -> PermissionRepository:
-    """Dependency for permission repository"""
-    return PermissionRepository(db)
-
-
-async def get_user_context(
-    request: Request,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-) -> dict:
-    """Get user context with permission info"""
-    perm_repo = PermissionRepository(db)
-
-    # Get IP address
-    ip_address = request.client.host if request.client else None
-    user_agent = request.headers.get("user-agent", "")
-
-    # Get accessible resources
-    accessible_weeklies = perm_repo.get_accessible_weeklies_optimized(current_user.id)
-    accessible_activities = perm_repo.get_accessible_activities_optimized(current_user.id)
-    shared_attachments = perm_repo.get_shared_attachments_optimized(current_user.id)
-
-    return {
-        "user": current_user,
-        "ip_address": ip_address,
-        "user_agent": user_agent,
-        "is_manager": current_user.role in MANAGEMENT_ROLES,
-        "accessible_weeklies": [w.id for w in accessible_weeklies],
-        "accessible_activities": [a.id for a in accessible_activities],
-        "shared_attachments": [a.id for a in shared_attachments],
-        "department": current_user.department,
-    }
-
-
 def create_user_with_profile(
     db: Session,
     email: str,
@@ -87,6 +56,10 @@ def create_user_with_profile(
     sector: QualitySector = QualitySector.CSI,
 ) -> User:
     from app.core.security import get_password_hash
+
+    # Normaliza o e-mail (o login busca com lower(); sem isso, "A@x" e "a@x"
+    # coexistiriam e o login cairia numa conta arbitrária — QA-005).
+    email = email.lower().strip()
 
     user = User(
         email=email,

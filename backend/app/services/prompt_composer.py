@@ -43,6 +43,7 @@ TECHNICAL_PROMPTS = {
 LANGUAGE_PROMPTS = {
     Language.PT: "Write ALL report content in Brazilian Portuguese.",
     Language.EN: "Write ALL report content in English.",
+    Language.KO: "Write ALL report content in Korean (한국어).",
 }
 
 DEPARTMENT_CONTEXT = """You write for the Quality department of the MX CS division. The department is composed of these sectors:
