@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { defineMessages, useI18n, type Msg } from '@/i18n'
 import { COMMON } from '@/i18n/messages/common'
+import { FAQ } from '@/i18n/messages/faq'
 import { cn } from '@/lib/utils'
 
 const M = defineMessages({
@@ -30,6 +31,7 @@ const NAV_ITEMS: { to: string; label: Msg; end: boolean }[] = [
   { to: '/agenda', label: COMMON.agenda, end: false },
   { to: '/relatorios', label: COMMON.reports, end: false },
   { to: '/departamentos', label: COMMON.departments, end: false },
+  { to: '/faq', label: FAQ.nav, end: false },
 ]
 
 /** Rotas onde a topbar entra no modo mínimo (só "Voltar"). */

@@ -480,3 +480,60 @@ class EmailRecipient(Base):
         UniqueConstraint("user_id", "email", name="uq_email_recipient"),
         Index("ix_email_recipients_user", "user_id"),
     )
+
+
+class BugStatus(str, enum.Enum):
+    OPEN = "open"
+    CLOSED = "closed"
+
+
+class BugReport(Base):
+    """Report de bug / FAQ interno.
+
+    Qualquer usuário abre (título + descrição curta); fica visível para todos
+    (para não abrirem a mesma solicitação). Só o admin/root fecha e responde.
+    """
+    __tablename__ = "bug_reports"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    # Snapshot do autor (sobrevive se o usuário for apagado da listagem pública).
+    author_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[BugStatus] = mapped_column(
+        EnumCol(BugStatus), nullable=False, default=BugStatus.OPEN
+    )
+    admin_response: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    closed_by: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    closed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (
+        Index("ix_bug_reports_status", "status"),
+        Index("ix_bug_reports_created_at", "created_at"),
+    )
+
+
+class FaqNotifyUser(Base):
+    """Usuários internos que recebem por e-mail as novas solicitações do FAQ.
+
+    A lista é gerida SOMENTE pelo admin/root.
+    """
+    __tablename__ = "faq_notify_users"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )

@@ -1,3 +1,4 @@
+import logging
 import uuid
 from pathlib import Path
 
@@ -21,6 +22,7 @@ from app.schemas.weekly import (
 from app.services.business import WeeklyService
 from app.services.pptx_service import PptxService
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Weekly Reports"])
 
 
@@ -283,3 +285,32 @@ def send_weekly_email(
             502,
         )
     return {"sent": True, "recipients": len(data.recipients)}
+
+
+@router.delete("/weekly/{report_id}", status_code=204)
+def delete_weekly(
+    report_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Exclui permanentemente um weekly do histórico (dono ou admin).
+
+    Remove a linha e o arquivo .pptx do disco. Sem senha — a confirmação é
+    feita no frontend.
+    """
+    report = db.query(WeeklyReport).filter(WeeklyReport.id == report_id).first()
+    if not report:
+        raise NotFoundError("Weekly")
+    if report.user_id != current_user.id and not current_user.is_admin:
+        raise QWIException("Você só pode excluir os seus próprios weeklys.", 403)
+
+    pptx_path = report.pptx_path
+    db.delete(report)
+    db.commit()
+    if pptx_path:
+        try:
+            p = Path(pptx_path)
+            if p.exists():
+                p.unlink()
+        except Exception:
+            logger.warning("Falha ao remover PPTX do weekly %s", report_id)

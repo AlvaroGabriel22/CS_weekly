@@ -85,8 +85,10 @@ def get_organization(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Todos os usuários ativos, para o organograma de departamentos."""
-    users = db.query(User).filter(User.is_active == True).all()  # noqa: E712
+    """Usuários ativos para o organograma (o root/admin NÃO aparece)."""
+    users = db.query(User).filter(
+        User.is_active == True, User.is_admin == False  # noqa: E712
+    ).all()
     return [
         OrgUserResponse(
             id=u.id,
@@ -188,12 +190,24 @@ def update_profile(
     return current_user
 
 
-@router.get("/writing-profile", response_model=WritingProfileResponse)
-def get_writing_profile(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def _get_or_create_writing_profile(current_user: User, db: Session) -> WritingProfile:
+    """Retorna o perfil de escrita do usuário, criando um padrão se não existir.
+
+    Contas sem perfil (ex.: o usuário root, criado sem writing_profile) não
+    devem quebrar a tela de Configurações — recebem os defaults do modelo.
+    """
     profile = db.query(WritingProfile).filter(WritingProfile.user_id == current_user.id).first()
     if not profile:
-        raise QWIException("Perfil de escrita não encontrado", 404)
+        profile = WritingProfile(user_id=current_user.id)
+        db.add(profile)
+        db.commit()
+        db.refresh(profile)
     return profile
+
+
+@router.get("/writing-profile", response_model=WritingProfileResponse)
+def get_writing_profile(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return _get_or_create_writing_profile(current_user, db)
 
 
 @router.patch("/writing-profile", response_model=WritingProfileResponse)
@@ -202,10 +216,7 @@ def update_writing_profile(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    profile = db.query(WritingProfile).filter(WritingProfile.user_id == current_user.id).first()
-    if not profile:
-        raise QWIException("Perfil de escrita não encontrado", 404)
-
+    profile = _get_or_create_writing_profile(current_user, db)
     for key, value in data.model_dump(exclude_unset=True).items():
         setattr(profile, key, value)
     db.commit()

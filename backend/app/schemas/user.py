@@ -79,6 +79,7 @@ class UserResponse(BaseModel):
     sector: QualitySector
     photo_url: str | None
     is_active: bool
+    is_admin: bool = False
     writing_profile: WritingProfileResponse | None = None
     created_at: datetime
 

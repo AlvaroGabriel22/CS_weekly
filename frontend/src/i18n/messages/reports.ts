@@ -183,4 +183,19 @@ export const REPORTS = defineMessages({
   aiTemplateBadge: { pt: 'Modelo da IA', en: 'AI template', ko: 'AI 템플릿' },
   aiTemplateSaved: { pt: 'Modelo da IA atualizado.', en: 'AI template updated.', ko: 'AI 템플릿이 업데이트됨.' },
   aiDegraded: { pt: 'Gerado sem IA', en: 'Generated without AI', ko: 'AI 없이 생성됨' },
+
+  // Exclusão de weekly
+  deleteWeekly: { pt: 'Excluir', en: 'Delete', ko: '삭제' },
+  deleteWeeklyTitle: { pt: 'Excluir weekly', en: 'Delete weekly', ko: '위클리 삭제' },
+  deleteWeeklyConfirm: {
+    pt: 'Deseja realmente excluir permanentemente este weekly?',
+    en: 'Do you really want to permanently delete this weekly?',
+    ko: '이 위클리를 영구적으로 삭제하시겠습니까?',
+  },
+  deleteWeeklySuccess: {
+    pt: 'Weekly excluído.',
+    en: 'Weekly deleted.',
+    ko: '위클리가 삭제되었습니다.',
+  },
+  deleting: { pt: 'Excluindo…', en: 'Deleting…', ko: '삭제 중…' },
 })

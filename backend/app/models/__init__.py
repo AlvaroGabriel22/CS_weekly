@@ -33,6 +33,9 @@ from app.models.postgres_models import (
     UserFlags,
     WeeklyAccessGrant,
     EmailRecipient,
+    BugReport,
+    BugStatus,
+    FaqNotifyUser,
     generate_uuid,
 )
 
@@ -64,6 +67,9 @@ __all__ = [
     "UserFlags",
     "WeeklyAccessGrant",
     "EmailRecipient",
+    "BugReport",
+    "BugStatus",
+    "FaqNotifyUser",
     # Functions
     "generate_uuid",
 ]

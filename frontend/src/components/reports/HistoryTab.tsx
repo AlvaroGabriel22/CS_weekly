@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, Download, Mail, Monitor, MoreVertical, Presentation, RefreshCw, Sparkles, Wand2 } from 'lucide-react'
+import { ChevronDown, Download, Loader2, Mail, Monitor, MoreVertical, Presentation, RefreshCw, Sparkles, Trash2, Wand2 } from 'lucide-react'
 import type { WeekRef } from '@/lib/dates'
 import { parseApiError } from '@/lib/errors'
 import { useI18n, type Msg } from '@/i18n'
@@ -14,9 +14,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useToast } from '@/components/ui/toast'
-import { downloadWeeklyPptx, useWeeklyReports } from '@/hooks/useWeekly'
+import { downloadWeeklyPptx, useDeleteWeekly, useWeeklyReports } from '@/hooks/useWeekly'
 import { useAiStyle, useSetAiTemplate } from '@/hooks/useAi'
 import { DeckViewer, SlideViewer } from '@/components/weekly/SlideViewer'
 import { SendEmailDialog } from '@/components/reports/SendEmailDialog'
@@ -123,8 +130,10 @@ function ReportCard({
   const [downloading, setDownloading] = useState(false)
   const [viewing, setViewing] = useState(false)
   const [emailing, setEmailing] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const aiStyle = useAiStyle()
   const setTemplate = useSetAiTemplate()
+  const deleteWeekly = useDeleteWeekly()
   const status = statusMeta(report.status)
   const ready = report.status === 'completed' && Boolean(report.pptx_path)
   // Decks montados no editor têm o layout salvo → preview fiel página a página;
@@ -154,6 +163,16 @@ function ReportCard({
     } finally {
       setDownloading(false)
     }
+  }
+
+  const handleDelete = () => {
+    deleteWeekly.mutate(report.id, {
+      onSuccess: () => {
+        setConfirmDelete(false)
+        toast.success(t(REPORTS.deleteWeeklySuccess))
+      },
+      onError: (err) => toast.error(parseApiError(err).message),
+    })
   }
 
   return (
@@ -247,6 +266,13 @@ function ReportCard({
                 <RefreshCw aria-hidden="true" />
                 {t(REPORTS.newVersion)}
               </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => setConfirmDelete(true)}
+                className="text-red-600 focus:bg-red-50 focus:text-red-600 data-[highlighted]:bg-red-50 data-[highlighted]:text-red-600"
+              >
+                <Trash2 aria-hidden="true" />
+                {t(REPORTS.deleteWeekly)}
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -278,6 +304,38 @@ function ReportCard({
       {emailing && (
         <SendEmailDialog report={report} open={emailing} onClose={() => setEmailing(false)} />
       )}
+
+      {/* Confirmação de exclusão permanente (sem senha) */}
+      <Dialog open={confirmDelete} onOpenChange={(open) => !deleteWeekly.isPending && setConfirmDelete(open)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t(REPORTS.deleteWeeklyTitle)}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-gray-600">{t(REPORTS.deleteWeeklyConfirm)}</p>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={deleteWeekly.isPending}
+              onClick={() => setConfirmDelete(false)}
+            >
+              {t(COMMON.cancel)}
+            </Button>
+            <Button variant="destructive" disabled={deleteWeekly.isPending} onClick={handleDelete}>
+              {deleteWeekly.isPending ? (
+                <>
+                  <Loader2 className="animate-spin" aria-hidden="true" />
+                  {t(REPORTS.deleting)}
+                </>
+              ) : (
+                <>
+                  <Trash2 aria-hidden="true" />
+                  {t(COMMON.delete)}
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api.routes import activities, ai_features, auth, translate, users, weekly
+from app.api.routes import activities, ai_features, auth, faq, translate, users, weekly
 from app.core.config import get_settings
 from app.core.database import Base, engine
 from app.core.exceptions import QWIException
@@ -45,6 +45,41 @@ def seed_default_template():
         db.close()
 
 
+def seed_root_user():
+    """Cria o usuário root/admin no 1º startup, se ainda não existir.
+
+    É usuário de testes + administração: is_admin=True, NÃO aparece no
+    organograma, gerencia o FAQ. Credenciais vêm do .env (ROOT_*).
+    """
+    from app.models import User, UserRole, QualitySector
+    from app.core.security import get_password_hash
+
+    db = SessionLocal()
+    try:
+        email = settings.ROOT_EMAIL.lower().strip()
+        exists = db.query(User).filter(
+            (User.is_admin == True) | (User.email == email)  # noqa: E712
+        ).first()
+        if exists:
+            return
+        root = User(
+            email=email,
+            employee_id=settings.ROOT_EMPLOYEE_ID,
+            hashed_password=get_password_hash(settings.ROOT_PASSWORD),
+            name=settings.ROOT_NAME,
+            role=UserRole.GERENTE_SR,
+            sector=QualitySector.CSI,
+            is_admin=True,
+            is_active=True,
+        )
+        db.add(root)
+        db.commit()
+        import logging
+        logging.getLogger(__name__).info("Usuário root/admin criado: %s", email)
+    finally:
+        db.close()
+
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.APP_NAME,
@@ -70,6 +105,7 @@ def create_app() -> FastAPI:
     app.include_router(weekly.router, prefix="/api")
     app.include_router(translate.router, prefix="/api")
     app.include_router(ai_features.router, prefix="/api")
+    app.include_router(faq.router, prefix="/api")
 
     # Arquivos enviados (fotos de perfil etc.) servidos estaticamente
     uploads_dir = Path("uploads")
@@ -81,6 +117,7 @@ def create_app() -> FastAPI:
         Base.metadata.create_all(bind=engine)
         run_migrations()
         seed_default_template()
+        seed_root_user()
         # Limpeza de PPTX antigos por (usuário, semana) — evita crescimento
         # indefinido de uploads/reports (QA-010).
         from app.services.retention import cleanup_old_reports

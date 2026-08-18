@@ -16,6 +16,7 @@ const ReportsPage = lazy(() => import('@/pages/ReportsPage').then(m => ({ defaul
 const DepartmentsPage = lazy(() => import('@/pages/DepartmentsPage').then(m => ({ default: m.DepartmentsPage })))
 const DepartmentOrgPage = lazy(() => import('@/pages/DepartmentOrgPage').then(m => ({ default: m.DepartmentOrgPage })))
 const ColleagueWeeklysPage = lazy(() => import('@/pages/ColleagueWeeklysPage').then(m => ({ default: m.ColleagueWeeklysPage })))
+const FaqPage = lazy(() => import('@/pages/FaqPage').then(m => ({ default: m.FaqPage })))
 const ProfilePage = lazy(() => import('@/pages/ProfilePage').then(m => ({ default: m.ProfilePage })))
 const SettingsPage = lazy(() => import('@/pages/SettingsPage').then(m => ({ default: m.SettingsPage })))
 
@@ -74,6 +75,7 @@ export default function App() {
               <Route path="/departamentos" element={<DepartmentsPage />} />
               <Route path="/departamentos/:sector" element={<DepartmentOrgPage />} />
               <Route path="/colegas/:userId" element={<ColleagueWeeklysPage />} />
+              <Route path="/faq" element={<FaqPage />} />
               <Route path="/perfil" element={<ProfilePage />} />
               <Route path="/configuracoes" element={<SettingsPage />} />
             </Route>

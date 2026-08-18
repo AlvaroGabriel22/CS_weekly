@@ -8,6 +8,8 @@ export interface User {
   sector: 'QM' | 'QA' | 'OQC' | 'IQC' | 'FIELD' | 'CSI'
   photo_url: string | null
   is_active: boolean
+  /** true apenas para o usuário root/admin (habilita gestão do FAQ). */
+  is_admin?: boolean
   writing_profile: WritingProfile | null
   created_at: string
 }

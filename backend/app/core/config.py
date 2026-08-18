@@ -25,6 +25,15 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7
 
+    # ── Usuário root/admin (criado no 1º startup se não existir) ────────────
+    # Usuário de testes e administração: NÃO aparece no organograma, gerencia o
+    # FAQ (fecha/responde) e define quem recebe os e-mails das solicitações.
+    # Troque a senha no .env antes de expor o sistema. Ver DEPLOY_WINDOWS.md.
+    ROOT_EMAIL: str = "admin@qwi.com"
+    ROOT_PASSWORD: str = "root-troque-esta-senha"
+    ROOT_NAME: str = "Administrador"
+    ROOT_EMPLOYEE_ID: str = "ROOT"
+
     # ── Provedor de LLM ────────────────────────────────────────────────────
     # "ollama" (local, padrão) ou "openai_compat" (API externa compatível com
     # OpenAI — chat/completions). Para trocar, basta o .env:

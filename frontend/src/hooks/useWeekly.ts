@@ -87,6 +87,20 @@ export function useGenerateWeekly() {
   })
 }
 
+/** Exclui permanentemente um weekly; some do histórico ao concluir (403 se não for dono). */
+export function useDeleteWeekly() {
+  const queryClient = useQueryClient()
+  return useMutation<void, unknown, string>({
+    mutationFn: async (id) => {
+      await api.delete(`/weekly/${id}`)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['weekly-reports'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+}
+
 /** Baixa o .pptx de um weekly (blob → download local). */
 export async function downloadWeeklyPptx(
   report: Pick<WeeklyReport, 'id' | 'week_number' | 'year' | 'version'>,

@@ -46,6 +46,19 @@ def get_current_admin_user(
     return current_user
 
 
+def require_root(current_user: User = Depends(get_current_user)) -> User:
+    """Dependency para ações exclusivas do usuário root/admin (is_admin).
+
+    Ex.: fechar/responder FAQ, gerir a lista de quem recebe os e-mails do FAQ.
+    """
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Ação restrita ao administrador do sistema.",
+        )
+    return current_user
+
+
 def create_user_with_profile(
     db: Session,
     email: str,

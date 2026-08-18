@@ -79,6 +79,14 @@ SECRET_KEY=<GERAR: python -c "import secrets; print(secrets.token_urlsafe(64))">
 ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=10080
 
+# ── Usuário root/admin (criado no 1º start — ver seção 5.1) ────────────
+# TROQUE a senha antes de subir. O e-mail deve ter um domínio válido
+# (evite .local/.test — são reservados e o login rejeita).
+ROOT_EMAIL=admin@qwi.com
+ROOT_PASSWORD=<DEFINA uma senha forte>
+ROOT_NAME=Administrador
+ROOT_EMPLOYEE_ID=ROOT
+
 # ── Rede: IP informado pelo dono do projeto ────────────────────────────
 # CORS precisa listar as URLs pelas quais o FRONTEND será acessado.
 CORS_ORIGINS=["http://<IP_DO_SERVIDOR>:3000","http://localhost:3000","http://127.0.0.1:3000"]
@@ -132,6 +140,26 @@ curl http://localhost:8000/api/health
 - **Backup** = copiar o arquivo `.db` com o backend parado (junto com a pasta
   `uploads/`, que guarda os anexos e os PPTX gerados em `uploads/reports/`).
 - Se um dia migrar de máquina: levar `qwi_dev.db` + `uploads/` e pronto.
+
+### 5.1 Usuário root/admin
+
+No **primeiro start**, o sistema cria automaticamente **um** usuário root/admin
+com as credenciais `ROOT_*` do `.env` (seção 4.1). Características:
+- **Não aparece no organograma** (é conta de administração/testes, não de um
+  funcionário real).
+- É o **único** que pode, no FAQ (seção do sistema): **fechar e responder**
+  solicitações, e **definir quais usuários** recebem por e-mail as novas
+  solicitações abertas.
+- Login com `ROOT_EMAIL` / `ROOT_PASSWORD`.
+
+Regras importantes:
+- **Troque `ROOT_PASSWORD`** no `.env` antes de expor o sistema.
+- O `ROOT_EMAIL` precisa de um **domínio válido** — não use `.local`/`.test`
+  (TLDs reservados que o login rejeita). O default `admin@qwi.com` funciona.
+- O root só é criado se **ainda não existir** nenhum usuário admin — trocar as
+  credenciais no `.env` depois do 1º start **não** recria nem atualiza o
+  existente. Para redefinir: peça ajuda ao administrador (ou apague a linha do
+  usuário admin no banco e reinicie para recriar com as novas credenciais).
 
 ## 6. IA — dois modos (controlado 100% pelo `.env`)
 
