@@ -750,6 +750,9 @@ class WeeklyService:
                 # (manual pesa mais que rascunho da IA; nunca falha a geração).
                 from app.services.style_learning import learn_from_layout
                 learn_from_layout(self.db, user.id, layout, source=layout_source)
+                # ...e o perfil de conhecimento (KPIs/entidades do usuário).
+                from app.services.knowledge_profile import learn_from_activities
+                learn_from_activities(self.db, user.id, activities)
 
                 self.db.commit()
                 self.db.refresh(report)
@@ -812,6 +815,9 @@ class WeeklyService:
 
             for activity in activities:
                 activity.status = ActivityStatus.USED_IN_REPORT
+
+            from app.services.knowledge_profile import learn_from_activities
+            learn_from_activities(self.db, user.id, activities)
 
             self.db.commit()
             self.db.refresh(report)

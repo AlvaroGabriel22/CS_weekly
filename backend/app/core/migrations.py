@@ -10,6 +10,8 @@ def run_migrations() -> None:
         ("attachments", "include_in_weekly", "BOOLEAN DEFAULT TRUE"),
         ("users", "sector", "VARCHAR(20) DEFAULT 'CSI'"),
         ("users", "employee_id", "VARCHAR(50) UNIQUE NOT NULL DEFAULT ''"),
+        ("users", "is_admin", "BOOLEAN DEFAULT FALSE"),
+        ("writing_profiles", "about_me", "TEXT DEFAULT ''"),
     ]
 
     inspector = inspect(engine)

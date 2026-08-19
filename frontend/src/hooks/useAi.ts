@@ -136,22 +136,69 @@ export interface DeckDraftInput {
   activityIds: string[]
   /**
    * undefined = usa o template ativo do usuário; 'none' = gerar sem modelo;
-   * um report_id = usar este weekly como modelo nesta geração.
+   * um report_id = usar este weekly do histórico como modelo nesta geração.
    */
-  templateChoice?: string | 'none'
+  templateReportId?: string | 'none'
+  /** Um .pptx enviado como modelo — tem prioridade sobre o report/ativo. */
+  templatePptxId?: string
 }
 
 export function useDeckDraft() {
   return useMutation<DeckDraftResponse, unknown, DeckDraftInput>({
-    mutationFn: async ({ ref, activityIds, templateChoice }) =>
-      (
+    mutationFn: async ({ ref, activityIds, templateReportId, templatePptxId }) => {
+      const usePptx = Boolean(templatePptxId)
+      return (
         await api.post('/ai/deck-draft', {
           year: ref.year,
           week_number: ref.week,
           activity_ids: activityIds,
-          use_template: templateChoice !== 'none',
+          use_template: usePptx || templateReportId !== 'none',
           template_report_id:
-            templateChoice && templateChoice !== 'none' ? templateChoice : null,
+            !usePptx && templateReportId && templateReportId !== 'none'
+              ? templateReportId
+              : null,
+          template_pptx_id: templatePptxId ?? null,
+        })
+      ).data
+    },
+  })
+}
+
+// ── Revisar com IA ──────────────────────────────────────────────────────────
+
+export type ReviewSuggestionType = 'highlight' | 'gap' | 'anomaly' | 'inconsistency'
+
+export interface ReviewSuggestion {
+  type: ReviewSuggestionType
+  message: string
+  activity_id: string | null
+}
+
+export interface ReviewWeekResponse {
+  suggestions: ReviewSuggestion[]
+  model: string | null
+  duration_ms: number
+}
+
+export interface ReviewWeekInput {
+  ref: WeekRef
+  activityIds: string[]
+}
+
+/**
+ * A IA revisa a semana (atividades + perfil) e devolve conselhos ancorados no
+ * padrão do usuário. Só sugere — não altera nada. Pode demorar até ~2 min com
+ * o modelo local; 503 quando a IA está indisponível (o backend manda mensagem
+ * clara em PT — trate via parseApiError).
+ */
+export function useReviewWeek() {
+  return useMutation<ReviewWeekResponse, unknown, ReviewWeekInput>({
+    mutationFn: async ({ ref, activityIds }) =>
+      (
+        await api.post('/ai/review', {
+          year: ref.year,
+          week_number: ref.week,
+          activity_ids: activityIds,
         })
       ).data,
   })

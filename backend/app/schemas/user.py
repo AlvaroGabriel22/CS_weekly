@@ -51,6 +51,7 @@ class WritingProfileUpdate(BaseModel):
     auto_describe_images: bool | None = None
     auto_explain_charts: bool | None = None
     personal_prompt: str | None = None
+    about_me: str | None = None
 
 
 class WritingProfileResponse(BaseModel):
@@ -65,6 +66,7 @@ class WritingProfileResponse(BaseModel):
     auto_describe_images: bool
     auto_explain_charts: bool
     personal_prompt: str
+    about_me: str = ""
 
     model_config = {"from_attributes": True}
 

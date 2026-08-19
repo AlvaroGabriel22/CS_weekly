@@ -116,3 +116,80 @@ def extract_table(content: bytes, filename: str) -> dict | None:
     except Exception as error:
         logger.warning("Falha ao extrair tabela | file=%s | err=%s", filename, error)
         return None
+
+
+# ── Leitura COMPLETA para cálculo (o extract_table acima é preview 30×12) ────
+
+MAX_ROWS_FULL = 20000
+MAX_COLS_FULL = 60
+
+
+
+def _trim_full(rows: list[list[str]]) -> dict | None:
+    """Corta colunas vazias à direita (cabeçalho vazio) e devolve o payload."""
+    if len(rows) < 2:
+        return None
+    width = max(len(r) for r in rows)
+    rows = [r + [""] * (width - len(r)) for r in rows]
+    header = rows[0]
+    # largura útil = última coluna com CABEÇALHO preenchido
+    while width > 0 and not str(header[width - 1]).strip():
+        width -= 1
+    if width == 0:
+        return None
+    rows = [r[:width] for r in rows]
+    return {"columns": rows[0], "rows": rows[1:]}
+
+
+def extract_full_table(content: bytes, filename: str) -> dict | None:
+    """Planilha inteira (até MAX_ROWS_FULL linhas) para o motor de análise.
+
+    Diferente de `extract_table` (preview truncado para a UI/PPT), aqui
+    precisamos de TODAS as linhas — os cálculos agregam a base completa.
+    Devolve {"columns": [...], "rows": [[...], ...]} ou None.
+    """
+    ext = Path(filename).suffix.lower()
+    try:
+        if ext == ".xlsx":
+            from openpyxl import load_workbook
+
+            workbook = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+            for sheet in workbook.worksheets:
+                rows: list[list[str]] = []
+                for row in sheet.iter_rows(max_row=MAX_ROWS_FULL, max_col=MAX_COLS_FULL,
+                                           values_only=True):
+                    rows.append([_cell_to_str(v) for v in row])
+                rows = [r for r in rows if any(c for c in r)]
+                if len(rows) >= 2:
+                    workbook.close()
+                    return _trim_full(rows)
+            workbook.close()
+            return None
+        if ext == ".csv":
+            text = content.decode("utf-8-sig", errors="replace")
+            sample = text[:4096]
+            try:
+                dialect = csv.Sniffer().sniff(sample, delimiters=",;\t")
+            except csv.Error:
+                dialect = csv.excel
+            rows = [
+                [_cell_to_str(c) for c in row]
+                for row in csv.reader(io.StringIO(text), dialect)
+            ]
+            rows = [r for r in rows if any(c for c in r)][:MAX_ROWS_FULL]
+            return _trim_full(rows)
+        if ext == ".xls":
+            import xlrd
+
+            book = xlrd.open_workbook(file_contents=content)
+            sheet = book.sheet_by_index(0)
+            rows = [
+                [_cell_to_str(sheet.cell_value(r, c)) for c in range(min(sheet.ncols, MAX_COLS_FULL))]
+                for r in range(min(sheet.nrows, MAX_ROWS_FULL))
+            ]
+            rows = [r for r in rows if any(c for c in r)]
+            return _trim_full(rows)
+        return None
+    except Exception as error:
+        logger.warning("Falha na leitura completa | file=%s | err=%s", filename, error)
+        return None

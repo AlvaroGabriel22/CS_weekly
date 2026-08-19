@@ -198,4 +198,80 @@ export const REPORTS = defineMessages({
     ko: '위클리가 삭제되었습니다.',
   },
   deleting: { pt: 'Excluindo…', en: 'Deleting…', ko: '삭제 중…' },
+
+  // Modelos de PPT enviados pelo usuário (.pptx de referência para a IA)
+  pptxTitle: { pt: 'Meus modelos de PPT', en: 'My PPT templates', ko: '내 PPT 템플릿' },
+  pptxIntro: {
+    pt: 'Envie um weekly antigo (.pptx) para a IA usar de modelo. Máx. 2.',
+    en: 'Upload an old weekly (.pptx) for the AI to use as a template. Max. 2.',
+    ko: '이전 위클리(.pptx)를 올려 AI 템플릿으로 사용하세요. 최대 2개.',
+  },
+  pptxUpload: { pt: 'Enviar PPT', en: 'Upload PPT', ko: 'PPT 올리기' },
+  pptxUploading: { pt: 'Enviando…', en: 'Uploading…', ko: '업로드 중…' },
+  pptxUploaded: { pt: 'Modelo enviado.', en: 'Template uploaded.', ko: '템플릿 업로드됨.' },
+  pptxRemoved: { pt: 'Modelo removido.', en: 'Template removed.', ko: '템플릿 삭제됨.' },
+  pptxRemove: { pt: 'Remover', en: 'Remove', ko: '삭제' },
+  pptxLimit: {
+    pt: 'Limite de 2 — remova um para adicionar',
+    en: 'Limit of 2 — remove one to add',
+    ko: '최대 2개 — 하나를 삭제하세요',
+  },
+  pptxEmpty: { pt: 'Nenhum modelo', en: 'No templates', ko: '템플릿 없음' },
+  pptxSlides: { pt: '{n} slides', en: '{n} slides', ko: '슬라이드 {n}장' },
+  aiTemplatePptxGroup: { pt: 'Modelos de PPT', en: 'PPT templates', ko: 'PPT 템플릿' },
+  pptxUnavailable: {
+    pt: 'Arquivo indisponível — reenvie o .pptx',
+    en: 'File unavailable — upload the .pptx again',
+    ko: '파일 없음 — .pptx를 다시 올리세요',
+  },
+
+  // Marcação de slots do modelo (o que cada elemento recebe na geração)
+  slotsBtn: { pt: 'Marcar campos', en: 'Mark fields', ko: '필드 지정' },
+  slotsTitle: { pt: 'O que é cada campo do modelo', en: 'What each field is', ko: '각 필드의 역할' },
+  slotsIntro: {
+    pt: 'Clique num elemento do slide e diga o que ele recebe na geração. Posição, fonte e cor vêm do seu .pptx e não mudam aqui.',
+    en: 'Click an element and say what it receives when generating. Position, font and color come from your .pptx and are not changed here.',
+    ko: '슬라이드 요소를 클릭해 생성 시 무엇이 들어갈지 지정하세요. 위치·글꼴·색은 .pptx에서 그대로 유지됩니다.',
+  },
+  slotsPick: { pt: 'Selecione um elemento no slide', en: 'Select an element on the slide', ko: '슬라이드에서 요소를 선택하세요' },
+  slotsSaved: { pt: 'Marcação salva.', en: 'Fields saved.', ko: '저장되었습니다.' },
+  slotsSave: { pt: 'Salvar marcação', en: 'Save fields', ko: '저장' },
+  slotsSlide: { pt: 'Slide {n}', en: 'Slide {n}', ko: '슬라이드 {n}' },
+  slotTitle: { pt: 'Título da atividade', en: 'Activity title', ko: '활동 제목' },
+  slotBody: { pt: 'Descrição', en: 'Description', ko: '설명' },
+  slotTable: { pt: 'Tabela', en: 'Table', ko: '표' },
+  slotImage: { pt: 'Imagem / evidência', en: 'Image / evidence', ko: '이미지 / 증적' },
+  slotChart: { pt: 'Gráfico', en: 'Chart', ko: '차트' },
+  slotWeekLabel: { pt: 'Rótulo da semana', en: 'Week label', ko: '주 라벨' },
+  slotStatic: { pt: 'Fixo (não muda)', en: 'Fixed (never changes)', ko: '고정 (변경 없음)' },
+  slotStaticHint: {
+    pt: 'Elementos fixos repetem iguais. Todo campo não preenchido na semana é limpo — nada do modelo antigo sobra no deck.',
+    en: 'Fixed elements repeat as-is. Any field not filled for the week is cleared — nothing from the old deck remains.',
+    ko: '고정 요소는 그대로 반복됩니다. 채워지지 않은 필드는 비워집니다.',
+  },
+
+  // Revisar com IA — conselho ancorado no padrão do usuário (não altera nada)
+  reviewBtn: { pt: 'Revisar com IA', en: 'Review with AI', ko: 'AI로 검토' },
+  reviewTitle: { pt: 'Revisão da semana', en: 'Week review', ko: '주간 검토' },
+  reviewLoading: {
+    pt: 'A IA está revisando sua semana… pode levar até 2 minutos.',
+    en: 'The AI is reviewing your week… this can take up to 2 minutes.',
+    ko: 'AI가 이번 주를 검토하고 있어요… 최대 2분이 걸릴 수 있습니다.',
+  },
+  reviewTypeHighlight: { pt: 'Destaque sugerido', en: 'Suggested highlight', ko: '추천 하이라이트' },
+  reviewTypeGap: { pt: 'Talvez esteja faltando', en: 'You might be missing', ko: '빠진 게 있을 수도' },
+  reviewTypeAnomaly: { pt: 'Fora do padrão', en: 'Out of pattern', ko: '패턴에서 벗어남' },
+  reviewTypeInconsistency: { pt: 'Inconsistência', en: 'Inconsistency', ko: '불일치' },
+  reviewEmpty: {
+    pt: 'Olhei sua semana e não vi nada a apontar. Bom trabalho!',
+    en: 'I looked over your week and found nothing to flag. Nice work!',
+    ko: '이번 주를 살펴봤는데 지적할 게 없네요. 수고했어요!',
+  },
+  reviewFooter: {
+    pt: 'Sugestões da IA — você decide o que aplicar.',
+    en: 'AI suggestions — you decide what to apply.',
+    ko: 'AI 제안 — 무엇을 적용할지는 당신이 결정합니다.',
+  },
+  reviewDismiss: { pt: 'Dispensar', en: 'Dismiss', ko: '무시' },
+  reviewRetry: { pt: 'Tentar de novo', en: 'Try again', ko: '다시 시도' },
 })

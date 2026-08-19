@@ -379,6 +379,9 @@ class DeckDraftRequest(BaseModel):
     # Weekly do histórico para usar como modelo NESTA geração. None = usa o
     # template ativo do usuário; use_template=False = gerar sem modelo.
     template_report_id: str | None = None
+    # PPT enviado pelo usuário (aba Templates) usado como modelo NESTA geração.
+    # Tem prioridade sobre template_report_id quando informado.
+    template_pptx_id: str | None = None
     use_template: bool = True
 
 
@@ -706,23 +709,42 @@ async def generate_deck_draft(
     sample_count = profile_row.sample_count if profile_row else 0
 
     template_layout: dict | None = None
+    # PPT enviado pelo usuário → clonagem determinística (máxima fidelidade,
+    # instantânea, sem depender do LLM interpretar o modelo).
+    clone_only = False
     if data.use_template:
-        template_id = data.template_report_id or (
-            profile_row.template_report_id if profile_row else None
-        )
-        if template_id:
-            template_report = (
-                db.query(WeeklyReport)
+        if data.template_pptx_id:
+            # Modelo é um PPT enviado pelo usuário (já convertido no upload).
+            from app.models import PptxTemplate
+
+            pptx_tpl = (
+                db.query(PptxTemplate)
                 .filter(
-                    WeeklyReport.id == template_id,
-                    WeeklyReport.user_id == current_user.id,
+                    PptxTemplate.id == data.template_pptx_id,
+                    PptxTemplate.user_id == current_user.id,
                 )
                 .first()
             )
-            candidate = ((template_report.content or {}).get("layout")
-                         if template_report else None)
-            if isinstance(candidate, dict) and candidate.get("slides"):
-                template_layout = candidate
+            if pptx_tpl and isinstance(pptx_tpl.layout, dict) and pptx_tpl.layout.get("slides"):
+                template_layout = pptx_tpl.layout
+                clone_only = True
+        if template_layout is None:
+            template_id = data.template_report_id or (
+                profile_row.template_report_id if profile_row else None
+            )
+            if template_id:
+                template_report = (
+                    db.query(WeeklyReport)
+                    .filter(
+                        WeeklyReport.id == template_id,
+                        WeeklyReport.user_id == current_user.id,
+                    )
+                    .first()
+                )
+                candidate = ((template_report.content or {}).get("layout")
+                             if template_report else None)
+                if isinstance(candidate, dict) and candidate.get("slides"):
+                    template_layout = candidate
 
     style_block = ""
     if template_layout:
@@ -747,18 +769,20 @@ async def generate_deck_draft(
     started = time_mod.monotonic()
     layout = None
     model_name = None
-    try:
-        images = _collect_deck_images(activities)
-        response = await service.generate(
-            prompt, DECK_SYSTEM, images=images or None, json_mode=True
-        )
-        model_name = response.model
-        layout = _sanitize_deck(_parse_json_object(response.content), allowed, title, subtitle)
-        if layout is None:
-            retry = await service.generate(prompt, DECK_SYSTEM, json_mode=True)
-            layout = _sanitize_deck(_parse_json_object(retry.content), allowed, title, subtitle)
-    except Exception as error:
-        logger.warning("Deck-draft: LLM falhou | %s", error)
+    # Modelo de PPT enviado: clona direto, sem chamar o LLM (fidelidade máxima).
+    if not clone_only:
+        try:
+            images = _collect_deck_images(activities)
+            response = await service.generate(
+                prompt, DECK_SYSTEM, images=images or None, json_mode=True
+            )
+            model_name = response.model
+            layout = _sanitize_deck(_parse_json_object(response.content), allowed, title, subtitle)
+            if layout is None:
+                retry = await service.generate(prompt, DECK_SYSTEM, json_mode=True)
+                layout = _sanitize_deck(_parse_json_object(retry.content), allowed, title, subtitle)
+        except Exception as error:
+            logger.warning("Deck-draft: LLM falhou | %s", error)
 
     source = "ai"
     supplemented = 0
@@ -887,6 +911,175 @@ def get_style_profile(
         .first()
     )
     return _style_response(row, db)
+
+
+# ── "O que a IA sabe sobre você" (perfil de conhecimento) ────────────────────
+
+@router.get("/knowledge")
+def get_knowledge(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Card do perfil: o que o usuário DECLAROU vs. o que a IA APRENDEU."""
+    from app.services.knowledge_profile import build_card
+
+    wp = current_user.writing_profile
+    return build_card(
+        db, current_user.id,
+        about_me=getattr(wp, "about_me", "") or "",
+        personal_prompt=getattr(wp, "personal_prompt", "") or "",
+    )
+
+
+class IgnoreKnowledgeRequest(BaseModel):
+    kind: str  # "kpi" | "entity"
+    value: str
+    entity_field: str | None = None
+
+
+@router.post("/knowledge/ignore")
+def ignore_knowledge(
+    data: IgnoreKnowledgeRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Usuário descarta um item aprendido ('na verdade não acompanho isso')."""
+    from app.services.knowledge_profile import build_card, ignore_item
+
+    ignore_item(db, current_user.id, data.kind, data.value.strip(), data.entity_field)
+    wp = current_user.writing_profile
+    return build_card(
+        db, current_user.id,
+        about_me=getattr(wp, "about_me", "") or "",
+        personal_prompt=getattr(wp, "personal_prompt", "") or "",
+    )
+
+
+# ── Revisor da semana (sugestões ancoradas no perfil do usuário) ─────────────
+
+REVIEW_SYSTEM = (
+    f"{QUALITY_DEPT_CONTEXT} "
+    "Você é o assistente pessoal deste analista e CONHECE o trabalho dele "
+    "(KPIs e padrões são dados abaixo). Revise as atividades da semana e "
+    "aponte, nos termos DELE, apenas o que estiver ANCORADO nos dados "
+    "apresentados. Categorias:\n"
+    "- highlight: 1 a 3 resultados mais relevantes para destacar (com base nos "
+    "KPIs dele).\n"
+    "- gap: algo que costuma constar e está faltando (ex.: auditoria sem o KPI, "
+    "NC sem plano de ação).\n"
+    "- anomaly: um KPI fora da faixa típica dele.\n"
+    "- inconsistency: número no texto que não bate com a tabela, contradição.\n"
+    "REGRAS ABSOLUTAS: NÃO reescreva nem resuma o texto do usuário. NÃO invente "
+    "KPIs, números ou fatos que não estejam nos dados. Seja específico e cite a "
+    "atividade. No máximo 6 itens; se não houver nada notável, devolva poucos ou "
+    "nenhum. Escreva em português, tom de colega que conhece o trabalho dele.\n"
+    'Responda APENAS com JSON: {"suggestions": [{"type": "highlight|gap|anomaly|'
+    'inconsistency", "message": "...", "activity_id": "<id ou vazio>"}]}'
+)
+
+_REVIEW_TYPES = {"highlight", "gap", "anomaly", "inconsistency"}
+
+
+def _week_dossier(activities: list[Activity]) -> list[dict]:
+    dossier = []
+    for a in activities:
+        meta = getattr(a, "metadata_entry", None)
+        dossier.append({
+            "activity_id": a.id,
+            "title": a.title,
+            "description": (a.description or "")[:400],
+            "kpis": (meta.related_kpis or []) if meta else [],
+            "line": (meta.line if meta else None),
+            "tables": [
+                {
+                    "columns": att.kpi_data["table"]["columns"],
+                    "rows": att.kpi_data["table"]["rows"][:8],
+                }
+                for att in a.attachments
+                if isinstance(att.kpi_data, dict) and att.kpi_data.get("table")
+            ],
+        })
+    return dossier
+
+
+class ReviewRequest(BaseModel):
+    year: int = Field(ge=2020, le=2100)
+    week_number: int = Field(ge=1, le=53)
+    activity_ids: list[str] = Field(min_length=1, max_length=100)
+
+
+@router.post("/review")
+async def review_week(
+    data: ReviewRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """A IA revisa a semana e sugere destaques/lacunas/anomalias, ancorada no
+    perfil do usuário. Não altera nada — é conselho. 503 se a IA estiver fora."""
+    from app.services.knowledge_profile import knowledge_context
+
+    activities = (
+        db.query(Activity)
+        .options(joinedload(Activity.attachments), joinedload(Activity.metadata_entry))
+        .filter(Activity.id.in_(data.activity_ids), Activity.user_id == current_user.id)
+        .all()
+    )
+    if not activities:
+        raise HTTPException(400, detail="Nenhuma atividade válida selecionada.")
+
+    valid_ids = {a.id for a in activities}
+    wp = current_user.writing_profile
+    context = knowledge_context(db, current_user.id, getattr(wp, "about_me", "") or "")
+
+    prompt = (
+        (f"Perfil do usuário:\n{context}\n\n" if context.strip() else "")
+        + "Atividades da semana (uma por entrada):\n"
+        + json.dumps(_week_dossier(activities), ensure_ascii=False)
+        + "\nRevise agora."
+    )
+
+    service = LLMService()
+    started = time_mod.monotonic()
+    parsed = None
+    model_name = None
+    try:
+        images = _collect_deck_images(activities)  # multimodal só no openai_compat
+        response = await service.generate(
+            prompt, REVIEW_SYSTEM, images=images or None, json_mode=True
+        )
+        model_name = response.model
+        parsed = _parse_json_object(response.content)
+        if parsed is None:
+            retry = await service.generate(prompt, REVIEW_SYSTEM, json_mode=True)
+            parsed = _parse_json_object(retry.content)
+    except Exception as error:
+        logger.warning("Review: LLM indisponível | %s", error)
+        raise HTTPException(
+            503,
+            detail="A revisão por IA está indisponível agora. Tente novamente em instantes.",
+        )
+
+    suggestions = []
+    for item in (parsed or {}).get("suggestions", [])[:8]:
+        if not isinstance(item, dict):
+            continue
+        stype = str(item.get("type", "")).strip().lower()
+        message = str(item.get("message", "")).strip()
+        if stype not in _REVIEW_TYPES or not message:
+            continue
+        aid = str(item.get("activity_id") or "").strip()
+        suggestions.append({
+            "type": stype,
+            "message": message[:600],
+            "activity_id": aid if aid in valid_ids else None,
+        })
+
+    duration_ms = int((time_mod.monotonic() - started) * 1000)
+    logger.info(
+        "Review | user=%s W%d/%d | %d sugestões | %dms",
+        current_user.id, data.week_number, data.year, len(suggestions), duration_ms,
+    )
+    return {"suggestions": suggestions, "model": model_name, "duration_ms": duration_ms}
 
 
 class SetTemplateRequest(BaseModel):

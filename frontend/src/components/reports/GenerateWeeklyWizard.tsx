@@ -11,6 +11,7 @@ import {
   Mail,
   Paperclip,
   Sparkles,
+  Wand2,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useI18n } from '@/i18n'
@@ -30,6 +31,7 @@ import {
 } from '@/hooks/useWeekly'
 import { useSaveSlideLayoutPrefs, useSlideLayoutPrefs } from '@/hooks/useSlideEditor'
 import { useAiStyle, useDeckDraft } from '@/hooks/useAi'
+import { usePptxTemplates } from '@/hooks/usePptxTemplates'
 import {
   Dialog,
   DialogContent,
@@ -38,6 +40,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { ReviewWeekDialog } from './ReviewWeekDialog'
 import { SendEmailDialog } from './SendEmailDialog'
 import { SlideEditor } from './SlideEditor'
 import { StepIndicator } from './StepIndicator'
@@ -166,8 +169,11 @@ export function GenerateWeeklyWizard({ initialWeek, onViewHistory }: GenerateWee
   const deckDraft = useDeckDraft()
   const aiStyle = useAiStyle()
   const reportsQuery = useWeeklyReports()
+  const pptxQuery = usePptxTemplates()
   const [confirmAiDeck, setConfirmAiDeck] = useState(false)
-  // 'active' = modelo ativo do usuário; 'none' = sem modelo; id = weekly escolhido
+  const [reviewOpen, setReviewOpen] = useState(false)
+  // Codificação do valor do seletor: 'active' = modelo ativo; 'none' = sem
+  // modelo; 'report:<id>' = weekly do histórico; 'pptx:<id>' = .pptx enviado.
   const [templateChoice, setTemplateChoice] = useState<string>('active')
   // Origem da montagem atual: manual pesa mais no aprendizado do padrão.
   const [deckSource, setDeckSource] = useState<'manual' | 'ai'>('manual')
@@ -182,13 +188,23 @@ export function GenerateWeeklyWizard({ initialWeek, onViewHistory }: GenerateWee
     [reportsQuery.data]
   )
 
+  const pptxTemplates = pptxQuery.data ?? []
+
   const runAiDeck = () => {
     setConfirmAiDeck(false)
+    const isPptx = templateChoice.startsWith('pptx:')
+    const isReport = templateChoice.startsWith('report:')
     deckDraft.mutate(
       {
         ref: week,
         activityIds: selectedOrder ?? [],
-        templateChoice: templateChoice === 'active' ? undefined : templateChoice,
+        // 'active' → sem id (usa o ativo); 'none' → sem modelo; report:/pptx: → id
+        templateReportId: isReport
+          ? templateChoice.slice('report:'.length)
+          : templateChoice === 'none'
+            ? 'none'
+            : undefined,
+        templatePptxId: isPptx ? templateChoice.slice('pptx:'.length) : undefined,
       },
       {
         onSuccess: (result) => {
@@ -368,6 +384,17 @@ export function GenerateWeeklyWizard({ initialWeek, onViewHistory }: GenerateWee
           </div>
 
           <div className="flex flex-col-reverse items-stretch gap-2 sm:flex-row sm:items-center sm:justify-end">
+            {/* IA opcional: revisa a semana e sugere melhorias (não altera nada) */}
+            <Button
+              size="lg"
+              variant="outline"
+              disabled={selectedSet.size === 0}
+              onClick={() => setReviewOpen(true)}
+              title={t(REPORTS.reviewBtn)}
+            >
+              <Wand2 aria-hidden="true" />
+              {t(REPORTS.reviewBtn)}
+            </Button>
             {/* IA opcional: monta o rascunho do deck — o usuário sempre pode ajustar */}
             <Button
               size="lg"
@@ -567,6 +594,14 @@ export function GenerateWeeklyWizard({ initialWeek, onViewHistory }: GenerateWee
         </div>
       )}
 
+      {/* Revisar com IA: conselho ancorado no padrão do usuário — não altera nada */}
+      <ReviewWeekDialog
+        open={reviewOpen}
+        onClose={() => setReviewOpen(false)}
+        week={week}
+        activityIds={selectedOrder ?? []}
+      />
+
       {/* Montar com IA: escolha do modelo a seguir + confirmação de substituição */}
       <Dialog open={confirmAiDeck} onOpenChange={setConfirmAiDeck}>
         <DialogContent>
@@ -602,10 +637,19 @@ export function GenerateWeeklyWizard({ initialWeek, onViewHistory }: GenerateWee
                   .filter((report) => report.id !== activeTemplate?.report_id)
                   .slice(0, 10)
                   .map((report) => (
-                    <option key={report.id} value={report.id}>
+                    <option key={report.id} value={`report:${report.id}`}>
                       W{report.week_number}/{report.year} · v{report.version}
                     </option>
                   ))}
+                {pptxTemplates.length > 0 && (
+                  <optgroup label={t(REPORTS.aiTemplatePptxGroup)}>
+                    {pptxTemplates.map((tpl) => (
+                      <option key={tpl.id} value={`pptx:${tpl.id}`}>
+                        {tpl.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
                 {activeTemplate && (
                   <option value="none">{t(REPORTS.aiTemplateNone)}</option>
                 )}

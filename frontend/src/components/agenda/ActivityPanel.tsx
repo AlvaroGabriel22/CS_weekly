@@ -10,6 +10,7 @@ import { useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 import {
   AlertCircle,
+  BarChart3,
   CalendarPlus,
   FileSpreadsheet,
   Image as ImageIcon,
@@ -57,6 +58,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { EmptyState } from '@/components/feedback'
+import { AnalyzeSpreadsheetDialog } from '@/components/agenda/AnalyzeSpreadsheetDialog'
 import { useToast } from '@/components/ui/toast'
 import { useI18n, type Msg } from '@/i18n'
 import { COMMON } from '@/i18n/messages/common'
@@ -97,6 +99,7 @@ const fieldErrorClass = 'border-red-500 bg-red-50 focus-visible:ring-red-500'
 const ATTACH_ACCEPT = '.xlsx,.xls,.csv,.jpg,.jpeg,.png'
 const ALLOWED_EXTENSIONS = ['xlsx', 'xls', 'csv', 'jpg', 'jpeg', 'png']
 const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png']
+const SPREADSHEET_EXTENSIONS = ['xlsx', 'xls', 'csv']
 const MAX_FILE_BYTES = 15 * 1024 * 1024
 
 type Translator = (msg: Msg, vars?: Record<string, string | number>) => string
@@ -111,6 +114,14 @@ function isImageName(name: string): boolean {
 
 function isImageAttachment(att: Attachment): boolean {
   return att.mime_type?.startsWith('image/') || isImageName(att.original_filename)
+}
+
+/** Planilha (xlsx/xls/csv) — só nelas cabe a análise com IA. */
+function isSpreadsheetAttachment(att: Attachment): boolean {
+  return (
+    SPREADSHEET_EXTENSIONS.includes(fileExt(att.original_filename)) ||
+    SPREADSHEET_EXTENSIONS.includes((att.file_type ?? '').toLowerCase())
+  )
 }
 
 /** null = arquivo OK; string = mensagem de erro localizada (curta, p/ chip). */
@@ -219,10 +230,13 @@ function PendingFileChip({
 function AttachmentChip({
   attachment,
   onDelete,
+  onAnalyze,
   disabled,
 }: {
   attachment: Attachment
   onDelete: () => void
+  /** Presente apenas em planilhas — abre "Analisar planilha". */
+  onAnalyze?: () => void
   disabled?: boolean
 }) {
   const { t } = useI18n()
@@ -253,6 +267,18 @@ function AttachmentChip({
         <span className="shrink-0 text-[10px] text-gray-500">
           {t(AGENDA.rowsCount, { n: table.n_rows })}
         </span>
+      )}
+      {onAnalyze && !confirming && (
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={onAnalyze}
+          aria-label={t(AGENDA.analyzeFile, { name: attachment.original_filename })}
+          title={t(AGENDA.analyze)}
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-brand transition-colors hover:bg-brand/10 disabled:opacity-50"
+        >
+          <BarChart3 className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
       )}
       {confirming ? (
         <span className="flex shrink-0 items-center">
@@ -633,6 +659,8 @@ function ActivityCard({
   const removeAttachment = useDeleteAttachment(monthRef)
   const [pendingUploads, setPendingUploads] = useState<PendingFile[]>([])
   const [uploadingId, setUploadingId] = useState<number | null>(null)
+  /** Planilha aberta em "Analisar planilha". */
+  const [analyzing, setAnalyzing] = useState<Attachment | null>(null)
   const uploadBusy = uploadingId !== null
   const fileInputRef = useRef<HTMLInputElement>(null)
   const optimistic = isOptimisticActivity(activity)
@@ -717,6 +745,9 @@ function ActivityCard({
                 attachment={att}
                 disabled={removeAttachment.isPending}
                 onDelete={() => deleteAttachment(att.id)}
+                onAnalyze={
+                  isSpreadsheetAttachment(att) && !optimistic ? () => setAnalyzing(att) : undefined
+                }
               />
             ))}
             {pendingUploads.map(item => (
@@ -786,6 +817,10 @@ function ActivityCard({
           aria-label={t(AGENDA.includeInWeekly)}
         />
       </div>
+
+      {analyzing && (
+        <AnalyzeSpreadsheetDialog attachment={analyzing} onClose={() => setAnalyzing(null)} />
+      )}
     </article>
   )
 }

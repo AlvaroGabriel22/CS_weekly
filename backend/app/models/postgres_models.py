@@ -177,7 +177,12 @@ class WritingProfile(Base):
     auto_impact: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
     auto_describe_images: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
     auto_explain_charts: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
+    # "Como quero a ajuda da IA" (preferências de escrita/tom).
     personal_prompt: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    # "Sobre mim e meu trabalho" — fatos que o usuário declara (KPIs, linha,
+    # como reporta). Semeia o perfil de conhecimento (tem precedência sobre o
+    # que a IA deduz do histórico). Ver app/services/knowledge_profile.py.
+    about_me: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
 
     user: Mapped["User"] = relationship(back_populates="writing_profile")
     default_template: Mapped[Optional["Template"]] = relationship()
@@ -536,4 +541,89 @@ class FaqNotifyUser(Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+
+class PptxTemplate(Base):
+    """PPT enviado pelo usuário para servir de MODELO à IA.
+
+    Guarda o arquivo original e o layout já convertido (DeckLayout) que a IA
+    usa como esqueleto. Máx. 2 por usuário — regra aplicada na rota.
+    """
+    __tablename__ = "pptx_templates"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    layout: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+    __table_args__ = (
+        Index("ix_pptx_templates_user", "user_id"),
+    )
+
+
+class UserKnowledgeProfile(Base):
+    """O que a IA APRENDEU sobre o usuário a partir do histórico dele.
+
+    Acumulado de forma determinística (sem LLM) a cada weekly gerado: KPIs que
+    ele acompanha, entidades recorrentes (linhas, fornecedores, processos) e
+    padrões. `ignored` guarda itens que o usuário descartou no card ("na
+    verdade não acompanho isso"). O que o usuário DECLARA (WritingProfile.
+    about_me) tem precedência sobre o aprendido.
+    """
+    __tablename__ = "user_knowledge_profiles"
+
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    # {"kpis": {nome: peso}, "entities": {tipo: {valor: peso}}, ...}
+    knowledge: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    # Itens que o usuário removeu no card (não voltam a aparecer).
+    ignored: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    sample_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+
+class AnalysisRecipe(Base):
+    """Receita de análise de planilha aprovada pelo usuário.
+
+    Guarda o pedido em linguagem natural, a receita estruturada (interpretada
+    pela IA, executada por código) e uma assinatura das colunas da planilha —
+    para reofertar na semana seguinte quando o mesmo formato aparecer.
+    """
+    __tablename__ = "analysis_recipes"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    # Pedido original ("FPY por linha e comparação com a semana passada").
+    request_text: Mapped[str] = mapped_column(Text, nullable=False)
+    # Receita executável (ver app/services/analysis_engine.py).
+    recipe: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    # Assinatura das colunas da planilha (normalizada) p/ reconhecer o formato.
+    columns_signature: Mapped[str] = mapped_column(String(500), nullable=False, server_default="")
+    label: Mapped[str] = mapped_column(String(120), nullable=False, server_default="")
+    # Último total calculado — base para a comparação com a semana anterior.
+    last_total: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    last_used_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+    __table_args__ = (
+        Index("ix_analysis_recipes_user", "user_id"),
     )

@@ -25,6 +25,7 @@ import { Avatar } from '@/components/ui/avatar'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { EmptyState, ErrorState } from '@/components/feedback'
 import { LanguageSwitcher } from '@/components/layout/LanguageSwitcher'
+import { KnowledgeCard } from '@/components/settings/KnowledgeCard'
 import { useToast } from '@/components/ui/toast'
 import { parseApiError, type FieldErrorInfo } from '@/lib/errors'
 import api from '@/lib/api'
@@ -55,6 +56,7 @@ const EDITABLE_KEYS = [
   'auto_impact',
   'auto_describe_images',
   'auto_explain_charts',
+  'about_me',
   'personal_prompt',
 ] as const
 type EditableKey = (typeof EDITABLE_KEYS)[number]
@@ -310,19 +312,37 @@ function GeneralTab() {
             ))}
           </section>
 
-          {/* Instruções pessoais */}
-          <section className="space-y-2 border-t border-gray-100 pt-5" aria-labelledby="settings-prompt">
-            <h4 id="settings-prompt" className="text-sm font-semibold text-gray-900">
-              {t(M.promptHeading)}
+          {/* Meu perfil para a IA (dois blocos de notas) */}
+          <section className="space-y-4 border-t border-gray-100 pt-5" aria-labelledby="settings-ai-profile">
+            <h4 id="settings-ai-profile" className="text-sm font-semibold text-gray-900">
+              {t(M.aiProfileHeading)}
             </h4>
-            <Textarea
-              id="personal_prompt"
-              rows={5}
-              value={form.personal_prompt ?? ''}
-              onChange={(e) => setField('personal_prompt', e.target.value)}
-              placeholder={t(M.promptPlaceholder)}
-              aria-label={t(M.promptHeading)}
-            />
+
+            <div className="space-y-2">
+              <Label htmlFor="about_me" className="text-gray-700">{t(M.aboutMeHeading)}</Label>
+              <Textarea
+                id="about_me"
+                rows={4}
+                value={form.about_me ?? ''}
+                onChange={(e) => setField('about_me', e.target.value)}
+                placeholder={t(M.aboutMePlaceholder)}
+                aria-label={t(M.aboutMeHeading)}
+                aria-describedby="about_me-hint"
+              />
+              <p id="about_me-hint" className="text-xs text-gray-500">{t(M.aboutMeHint)}</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="personal_prompt" className="text-gray-700">{t(M.promptHeading)}</Label>
+              <Textarea
+                id="personal_prompt"
+                rows={3}
+                value={form.personal_prompt ?? ''}
+                onChange={(e) => setField('personal_prompt', e.target.value)}
+                placeholder={t(M.promptPlaceholder)}
+                aria-label={t(M.promptHeading)}
+              />
+            </div>
           </section>
 
           {/* Barra de salvar (dirty-state) */}
@@ -380,6 +400,9 @@ function GeneralTab() {
 
       {/* ── Card: preferências de escrita da IA ─────────────────────────── */}
       {renderWritingCard()}
+
+      {/* ── Card: o que a IA já aprendeu sobre o usuário ────────────────── */}
+      <KnowledgeCard />
     </div>
   )
 }

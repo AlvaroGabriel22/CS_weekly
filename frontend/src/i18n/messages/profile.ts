@@ -80,12 +80,52 @@ export const PROFILE = defineMessages({
   autoImpact: { pt: 'Impacto', en: 'Impact', ko: '영향' },
   autoDescribeImages: { pt: 'Descrever imagens', en: 'Describe images', ko: '이미지 설명' },
   autoExplainCharts: { pt: 'Explicar gráficos', en: 'Explain charts', ko: '차트 설명' },
-  promptHeading: { pt: 'Instruções à IA', en: 'AI instructions', ko: 'AI 지침' },
-  promptPlaceholder: {
-    pt: 'Ex.: escreva em 3ª pessoa',
-    en: 'E.g., write in third person',
-    ko: '예: 3인칭으로 작성',
+  // ── Meu perfil para a IA (dois blocos de notas) ───────────────────────────
+  aiProfileHeading: { pt: 'Meu perfil para a IA', en: 'My profile for the AI', ko: 'AI를 위한 내 프로필' },
+  aboutMeHeading: { pt: 'Sobre mim e meu trabalho', en: 'About me and my work', ko: '나와 내 업무 소개' },
+  aboutMeHint: {
+    pt: 'Ajuda a IA a te entender mais rápido.',
+    en: 'Helps the AI understand you faster.',
+    ko: 'AI가 당신을 더 빨리 이해하도록 돕습니다.',
   },
+  aboutMePlaceholder: {
+    pt: 'Conte à IA seus KPIs, sua linha, como você reporta. Ex.: Acompanho FPY (~92%) e PPM na linha 3; reporto NC com plano de ação 8D.',
+    en: 'Tell the AI your KPIs, your line, how you report. E.g.: I track FPY (~92%) and PPM on line 3; I report NCs with an 8D action plan.',
+    ko: 'AI에게 당신의 KPI, 담당 라인, 보고 방식을 알려주세요. 예: 3라인의 FPY(~92%)와 PPM을 관리하고, NC는 8D 조치 계획으로 보고합니다.',
+  },
+  promptHeading: { pt: 'Como quero a ajuda da IA', en: 'How I want the AI to help', ko: 'AI 지원 방식' },
+  promptPlaceholder: {
+    pt: 'Preferências de tom/estilo. Ex.: seja direto e executivo.',
+    en: 'Tone/style preferences. E.g.: be direct and executive.',
+    ko: '톤/스타일 선호. 예: 간결하고 임원 보고 스타일로.',
+  },
+
+  // ── Card: o que a IA já aprendeu ───────────────────────────────────────────
+  knowledgeTitle: { pt: 'O que já aprendi sobre você', en: 'What I have learned about you', ko: '내가 파악한 당신에 대한 정보' },
+  knowledgeSubtitle: {
+    pt: 'aprendendo · com base em {count} semana(s)',
+    en: 'learning · based on {count} week(s)',
+    ko: '학습 중 · {count}주 기준',
+  },
+  knowledgeKpis: { pt: 'KPIs', en: 'KPIs', ko: 'KPI' },
+  knowledgeEntities: { pt: 'Padrões', en: 'Patterns', ko: '패턴' },
+  knowledgeDismissHint: {
+    pt: 'Descartar diz à IA "não acompanho isso".',
+    en: 'Dismissing tells the AI "I don’t track this".',
+    ko: '항목을 제거하면 AI에 "관리하지 않음"이라고 알려줍니다.',
+  },
+  knowledgeEmpty: {
+    pt: 'Ainda estou te conhecendo — gere alguns weeklys e eu vou aprendendo seus KPIs e padrões. Enquanto isso, me conte sobre você no campo acima.',
+    en: 'Still getting to know you — generate a few weeklys and I’ll learn your KPIs and patterns. In the meantime, tell me about yourself in the field above.',
+    ko: '아직 당신을 파악하는 중입니다 — 위클리를 몇 개 생성하면 KPI와 패턴을 배웁니다. 그동안 위 항목에 자신을 소개해 주세요.',
+  },
+  knowledgeDismiss: { pt: 'Descartar {value}', en: 'Dismiss {value}', ko: '{value} 제거' },
+  entityLine: { pt: 'Linha', en: 'Line', ko: '라인' },
+  entitySupplier: { pt: 'Fornecedor', en: 'Supplier', ko: '공급업체' },
+  entityProcess: { pt: 'Processo', en: 'Process', ko: '공정' },
+  entityProduct: { pt: 'Produto', en: 'Product', ko: '제품' },
+  entityDefectType: { pt: 'Tipo de defeito', en: 'Defect type', ko: '불량 유형' },
+
   unsavedChanges: { pt: 'Alterações não salvas.', en: 'Unsaved changes.', ko: '저장되지 않은 변경 사항' },
   allSaved: { pt: 'Tudo salvo.', en: 'All saved.', ko: '모두 저장됨' },
   discard: { pt: 'Descartar', en: 'Discard', ko: '되돌리기' },

@@ -19,6 +19,26 @@ import type { Activity, Attachment, ExtractedTable } from '@/types'
 export type ElementBinding = 'summary' | 'highlights' | 'kpis' | 'conclusions' | 'next_steps'
 export type ShapeKind = 'rect' | 'line' | 'ellipse'
 
+/**
+ * Papel de um elemento dentro de um MODELO de PPT (aba Templates).
+ *
+ * `static` é a decoração/rótulo fixo: repete igual em todo slide e nunca
+ * recebe conteúdo. Todo o resto, se a semana não preencher, é limpo — é isso
+ * que impede o texto da semana anterior de vazar para o deck novo.
+ */
+export type ElementSlot =
+  | 'title'
+  | 'body'
+  | 'table'
+  | 'image'
+  | 'chart'
+  | 'week_label'
+  | 'static'
+
+export const ELEMENT_SLOTS: ElementSlot[] = [
+  'title', 'body', 'table', 'image', 'chart', 'week_label', 'static',
+]
+
 export interface SlideElement {
   id: string
   type: 'text' | 'image' | 'table' | 'shape'
@@ -43,6 +63,11 @@ export interface SlideElement {
   align?: 'left' | 'center' | 'right'
   color?: string
   pinned?: boolean
+  /** Só em MODELOS de PPT: o que este elemento representa na geração. */
+  slot?: ElementSlot
+  /** Âncora para o exportador por mutação: shape correspondente no .pptx. */
+  src_shape_id?: number | null
+  src_slide?: number
 }
 
 /** Fontes oferecidas no editor — todas seguras na web E no PowerPoint. */

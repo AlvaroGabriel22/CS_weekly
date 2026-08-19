@@ -36,6 +36,9 @@ from app.models.postgres_models import (
     BugReport,
     BugStatus,
     FaqNotifyUser,
+    PptxTemplate,
+    UserKnowledgeProfile,
+    AnalysisRecipe,
     generate_uuid,
 )
 
@@ -70,6 +73,9 @@ __all__ = [
     "BugReport",
     "BugStatus",
     "FaqNotifyUser",
+    "PptxTemplate",
+    "UserKnowledgeProfile",
+    "AnalysisRecipe",
     # Functions
     "generate_uuid",
 ]

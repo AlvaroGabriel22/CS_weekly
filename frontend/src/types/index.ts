@@ -25,6 +25,7 @@ export interface WritingProfile {
   auto_impact: boolean
   auto_describe_images: boolean
   auto_explain_charts: boolean
+  about_me: string
   personal_prompt: string
 }
 

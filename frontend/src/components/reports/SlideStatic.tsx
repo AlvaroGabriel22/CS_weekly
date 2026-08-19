@@ -148,10 +148,22 @@ export interface StaticSlidePageProps {
   /** Largura em px na tela (a escala das fontes deriva dela). */
   width: number
   className?: string
+  /** Marcação de slots: torna cada elemento clicável (sem mover nem editar). */
+  onSelectElement?: (id: string) => void
+  selectedElementId?: string | null
+  /** Etiqueta mostrada sobre o elemento (ex.: o slot marcado). */
+  elementBadge?: (element: SlideElement) => { text: string; muted?: boolean } | null
 }
 
 /** Uma página 16:9 do layout, fiel ao que vai para o PPT. */
-export function StaticSlidePage({ slide, width, className }: StaticSlidePageProps) {
+export function StaticSlidePage({
+  slide,
+  width,
+  className,
+  onSelectElement,
+  selectedElementId,
+  elementBadge,
+}: StaticSlidePageProps) {
   const scale = width / DESIGN_WIDTH
   const elements = useMemo(() => slide.elements ?? [], [slide])
   return (
@@ -162,6 +174,40 @@ export function StaticSlidePage({ slide, width, className }: StaticSlidePageProp
       {elements.map(el => (
         <StaticElement key={el.id} element={el} scale={scale} />
       ))}
+      {onSelectElement &&
+        elements.map(el => {
+          const badge = elementBadge?.(el) ?? null
+          const selected = selectedElementId === el.id
+          return (
+            <button
+              key={`hit-${el.id}`}
+              type="button"
+              onClick={() => onSelectElement(el.id)}
+              aria-pressed={selected}
+              className={`absolute transition-colors ${
+                selected
+                  ? 'ring-2 ring-brand bg-brand/10'
+                  : 'ring-1 ring-dashed ring-gray-300 hover:bg-brand/5'
+              }`}
+              style={{
+                left: `${el.x * 100}%`,
+                top: `${el.y * 100}%`,
+                width: `${Math.max(el.w, 0.01) * 100}%`,
+                height: `${Math.max(el.h, 0.01) * 100}%`,
+              }}
+            >
+              {badge && (
+                <span
+                  className={`absolute -top-1 left-0 max-w-full truncate rounded px-1 text-[9px] font-semibold leading-4 ${
+                    badge.muted ? 'bg-gray-400 text-white' : 'bg-brand text-white'
+                  }`}
+                >
+                  {badge.text}
+                </span>
+              )}
+            </button>
+          )
+        })}
     </div>
   )
 }
