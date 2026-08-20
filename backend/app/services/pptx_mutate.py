@@ -37,7 +37,7 @@ from pptx.chart.data import CategoryChartData
 from pptx.opc.packuri import PackURI
 from pptx.oxml.ns import qn
 from pptx.parts.chart import ChartPart
-from pptx.util import Emu
+from pptx.util import Emu, Pt
 
 logger = logging.getLogger(__name__)
 
@@ -371,3 +371,16 @@ def _clone_chart_part(graphic_frame, slide) -> None:
         new_part.rels._add_relationship(rel.reltype, rel._target, rel.is_external)
 
     chart_ref.set(R_NS + "id", slide_part.rels._add_relationship(CHART_RELTYPE, new_part))
+
+
+def set_font_size(shape, size_pt: float) -> None:
+    """Fixa o corpo de todos os runs da caixa.
+
+    Usado pelo encaixe de texto: quando a medição diz que o texto só cabe em
+    12pt, é aqui que o 14pt do modelo é reduzido. Escreve em TODOS os runs
+    porque um corpo herdado do master não aparece no run e continuaria valendo.
+    """
+    frame = _text_frame(shape)
+    for paragraph in frame.paragraphs:
+        for run in paragraph.runs:
+            run.font.size = Pt(size_pt)

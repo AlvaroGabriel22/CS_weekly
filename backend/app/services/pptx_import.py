@@ -39,7 +39,8 @@ BRAND = "#0C379C"
 # `static` é a decoração/rótulo fixo do modelo — repete igual em todo slide e
 # nunca recebe conteúdo. Todo o resto, se não for preenchido na semana, é
 # limpo: é isso que impede o texto da semana anterior de vazar para o deck novo.
-SLOTS = ("title", "body", "table", "image", "chart", "week_label", "static")
+SLOTS = ("title", "body", "activity_date", "table", "image", "chart",
+         "week_label", "static")
 
 # "W29", "S33" — selo de semana.
 _WEEK_BADGE = re.compile(r"^(w|s)\s*\d{1,2}([\s·|/-]+\d{2,4})?$", re.IGNORECASE)
@@ -48,6 +49,9 @@ _WEEK_BADGE = re.compile(r"^(w|s)\s*\d{1,2}([\s·|/-]+\d{2,4})?$", re.IGNORECASE
 _WEEK_RANGE = re.compile(
     r"\d{1,2}/\d{1,2}(/\d{2,4})?\s*(a|à|–|—|-|até|to)\s*\d{1,2}/\d{1,2}", re.IGNORECASE
 )
+# "20/07", "20/07/2026" sozinho numa caixa: a data DAQUELA atividade, que
+# também precisa ser trocada (modelos costumam ter uma por bloco).
+_ACTIVITY_DATE = re.compile(r"^\d{1,2}/\d{1,2}(/\d{2,4})?$")
 # Um rótulo de período é uma linha curta; num parágrafo, a data é só conteúdo.
 WEEK_LABEL_MAX_CHARS = 60
 TITLE_MAX_CHARS = 70
@@ -286,8 +290,11 @@ def _suggest_slots(elements: list[dict]) -> None:
         return
 
     for element in texts:
-        if _is_week_label(element.get("text") or ""):
+        texto = (element.get("text") or "").strip()
+        if _is_week_label(texto):
             element["slot"] = "week_label"
+        elif _ACTIVITY_DATE.match(texto):
+            element["slot"] = "activity_date"
 
     livres = [e for e in texts if not e.get("slot")]
     if not livres:

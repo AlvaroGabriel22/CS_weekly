@@ -29,6 +29,7 @@ export type ShapeKind = 'rect' | 'line' | 'ellipse'
 export type ElementSlot =
   | 'title'
   | 'body'
+  | 'activity_date'
   | 'table'
   | 'image'
   | 'chart'
@@ -36,7 +37,7 @@ export type ElementSlot =
   | 'static'
 
 export const ELEMENT_SLOTS: ElementSlot[] = [
-  'title', 'body', 'table', 'image', 'chart', 'week_label', 'static',
+  'title', 'body', 'activity_date', 'table', 'image', 'chart', 'week_label', 'static',
 ]
 
 export interface SlideElement {

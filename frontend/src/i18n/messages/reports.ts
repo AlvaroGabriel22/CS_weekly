@@ -239,6 +239,7 @@ export const REPORTS = defineMessages({
   slotsSlide: { pt: 'Slide {n}', en: 'Slide {n}', ko: '슬라이드 {n}' },
   slotTitle: { pt: 'Título da atividade', en: 'Activity title', ko: '활동 제목' },
   slotBody: { pt: 'Descrição', en: 'Description', ko: '설명' },
+  slotActivityDate: { pt: 'Data da atividade', en: 'Activity date', ko: '활동 날짜' },
   slotTable: { pt: 'Tabela', en: 'Table', ko: '표' },
   slotImage: { pt: 'Imagem / evidência', en: 'Image / evidence', ko: '이미지 / 증적' },
   slotChart: { pt: 'Gráfico', en: 'Chart', ko: '차트' },

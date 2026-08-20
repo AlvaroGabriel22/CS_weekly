@@ -35,6 +35,7 @@ import { StaticSlidePage } from './SlideStatic'
 const SLOT_LABEL: Record<ElementSlot, Msg> = {
   title: REPORTS.slotTitle,
   body: REPORTS.slotBody,
+  activity_date: REPORTS.slotActivityDate,
   table: REPORTS.slotTable,
   image: REPORTS.slotImage,
   chart: REPORTS.slotChart,
@@ -47,7 +48,7 @@ function allowedSlots(element: SlideElement): ElementSlot[] {
   if (element.type === 'table') return ['table', 'static']
   if (element.type === 'image') return ['image', 'chart', 'static']
   if (element.type === 'shape') return ['static']
-  return ['title', 'body', 'week_label', 'static']
+  return ['title', 'body', 'activity_date', 'week_label', 'static']
 }
 
 export interface TemplateSlotsDialogProps {
