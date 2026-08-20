@@ -240,6 +240,23 @@ export const REPORTS = defineMessages({
   slotTitle: { pt: 'Título da atividade', en: 'Activity title', ko: '활동 제목' },
   slotBody: { pt: 'Descrição', en: 'Description', ko: '설명' },
   slotActivityDate: { pt: 'Data da atividade', en: 'Activity date', ko: '활동 날짜' },
+  formattingSelection: {
+    pt: 'Formatando o trecho marcado',
+    en: 'Formatting selected text',
+    ko: '선택한 텍스트에 적용',
+  },
+  formattingSelectionHint: {
+    pt: 'Sem nada marcado, a formatação vale para a caixa inteira.',
+    en: 'With nothing selected, formatting applies to the whole box.',
+    ko: '선택이 없으면 상자 전체에 적용됩니다.',
+  },
+  lineSpacing: { pt: 'Espaçamento entre linhas', en: 'Line spacing', ko: '줄 간격' },
+  lineSpacingSingle: { pt: 'Simples', en: 'Single', ko: '1줄' },
+  translateSelection: {
+    pt: 'Traduzir o trecho marcado',
+    en: 'Translate selected text',
+    ko: '선택한 텍스트 번역',
+  },
   pptxPreviewTitle: {
     pt: 'Pré-visualização do modelo',
     en: 'Template preview',

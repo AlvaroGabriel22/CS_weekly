@@ -54,6 +54,10 @@ WINDOWS_FILES: dict[str, tuple[str, str, str, str]] = {
     "trebuchet ms": ("trebuc.ttf", "trebucbd.ttf", "trebucit.ttf", "trebucbi.ttf"),
     "verdana": ("verdana.ttf", "verdanab.ttf", "verdanai.ttf", "verdanaz.ttf"),
     "courier new": ("cour.ttf", "courbd.ttf", "couri.ttf", "courbi.ttf"),
+    # Malgun Gothic é a fonte de interface coreana do Windows — é o que
+    # sustenta o deck em ko sem cair em caixinhas. Não existe arquivo itálico:
+    # o PowerPoint inclina o regular, então medimos com ele mesmo.
+    "malgun gothic": ("malgun.ttf", "malgunbd.ttf", "malgun.ttf", "malgunbd.ttf"),
 }
 
 # Último recurso: presente em praticamente toda instalação Linux/Pillow.
@@ -193,15 +197,21 @@ def text_width(text: str, family: str, size_pt: float,
 
 
 def line_height(family: str, size_pt: float,
-                bold: bool = False, italic: bool = False) -> float:
-    """Altura de UMA linha em polegadas (ascent + descent da própria fonte)."""
+                bold: bool = False, italic: bool = False,
+                line_spacing: float = 1.0) -> float:
+    """Altura de UMA linha em polegadas (ascent + descent da própria fonte).
+
+    `line_spacing` é o múltiplo do PowerPoint: 1.0 = simples, 1.5, 2.0. Entra
+    aqui porque quem escolhe espaçamento maior ocupa mais caixa — medir sem
+    ele devolveria "cabe" para um texto que o PowerPoint faz transbordar.
+    """
     font, divisor = _font_for(family, size_pt, bold, italic)
     try:
         ascent, descent = font.getmetrics()
         altura = (ascent + descent) / divisor
     except (AttributeError, OSError):
         altura = size_pt * 1.2
-    return altura / PT_PER_INCH
+    return (altura / PT_PER_INCH) * max(float(line_spacing or 1.0), 0.1)
 
 
 def wrap_text(text: str, width: float, family: str, size_pt: float,
@@ -250,6 +260,7 @@ def fit_text(
     italic: bool = False,
     min_size_pt: float = MIN_FONT_PT,
     allow_shrink: bool = True,
+    line_spacing: float = 1.0,
 ) -> TextFit:
     """Encaixa o texto na caixa do modelo.
 
@@ -260,7 +271,7 @@ def fit_text(
     corpo = float(size_pt)
     while True:
         linhas = wrap_text(text, width, family, corpo, bold, italic)
-        altura_linha = line_height(family, corpo, bold, italic)
+        altura_linha = line_height(family, corpo, bold, italic, line_spacing)
         total = len(linhas) * altura_linha
         if total <= height or not allow_shrink or corpo - SHRINK_STEP_PT < min_size_pt:
             break

@@ -8,7 +8,11 @@
 import { useMemo, type CSSProperties } from 'react'
 import { FileSpreadsheet, ImageIcon } from 'lucide-react'
 import { useAttachmentImage } from '@/hooks/useSlideEditor'
-import { COLORS, DESIGN_WIDTH, type SlideDef, type SlideElement } from './slideLayout'
+import { RichText } from './RichText'
+import {
+  COLORS, cssLineHeight, DESIGN_WIDTH, fontStack,
+  type SlideDef, type SlideElement,
+} from './slideLayout'
 
 function ImageBox({ attachmentId }: { attachmentId?: string }) {
   const url = useAttachmentImage(attachmentId)
@@ -127,18 +131,18 @@ function StaticElement({ element, scale }: { element: SlideElement; scale: numbe
       style={{
         ...style,
         fontSize: element.font_size * scale,
-        fontFamily: element.font_family ?? 'Calibri',
+        fontFamily: fontStack(element.font_family),
         fontWeight: element.bold ? 700 : 400,
         fontStyle: element.italic ? 'italic' : 'normal',
         textAlign: element.align ?? 'left',
         color: element.color ?? COLORS.dark,
-        lineHeight: 1.25,
+        lineHeight: cssLineHeight(element.line_spacing),
         overflow: 'hidden',
         whiteSpace: 'pre-wrap',
         wordBreak: 'break-word',
       }}
     >
-      {element.text}
+      <RichText element={element} scale={scale} />
     </div>
   )
 }

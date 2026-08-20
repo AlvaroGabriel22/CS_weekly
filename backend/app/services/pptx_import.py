@@ -173,7 +173,33 @@ def _text_element(shape, slide_w: int, slide_h: int, idx: int) -> dict | None:
     align = _paragraph_align(paragraph) if paragraph is not None else None
     if align:
         element["align"] = align
+    espacamento = _line_spacing(paragraph)
+    if espacamento:
+        element["line_spacing"] = espacamento
     return element
+
+
+def _line_spacing(paragraph) -> float | None:
+    """Espaçamento entre linhas do parágrafo, como MÚLTIPLO.
+
+    O python-pptx devolve um número (múltiplo) ou um Length (espaçamento
+    exato, em EMU). O exportador raciocina em múltiplo; um valor exato vira
+    None e a medição usa o simples — errar para menos aqui só faz o encaixe
+    ser conservador, nunca deixa texto vazar.
+    """
+    if paragraph is None:
+        return None
+    try:
+        valor = paragraph.line_spacing
+    except Exception:
+        return None
+    if valor is None or hasattr(valor, "emu"):
+        return None
+    try:
+        numero = float(valor)
+    except (TypeError, ValueError):
+        return None
+    return numero if 0.1 <= numero <= 5 else None
 
 
 def _slot_element(shape, slide_w: int, slide_h: int, idx: int, kind: str) -> dict:

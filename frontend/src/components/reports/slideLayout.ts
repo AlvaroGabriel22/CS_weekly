@@ -40,6 +40,24 @@ export const ELEMENT_SLOTS: ElementSlot[] = [
   'title', 'body', 'activity_date', 'table', 'image', 'chart', 'week_label', 'static',
 ]
 
+/**
+ * Um TRECHO formatado dentro de uma caixa de texto.
+ *
+ * Existe para o usuário poder deixar só uma palavra em negrito ou maior, sem
+ * partir a caixa em várias. Campo ausente = herda o do elemento, que continua
+ * sendo a formatação da caixa inteira. `text` do elemento permanece o texto
+ * corrido (é o que a tradução, a medição e o backend antigo leem), então os
+ * dois precisam andar juntos — use os utilitários de `richText.ts`.
+ */
+export interface TextRun {
+  text: string
+  bold?: boolean
+  italic?: boolean
+  font_size?: number
+  font_family?: string
+  color?: string
+}
+
 export interface SlideElement {
   id: string
   type: 'text' | 'image' | 'table' | 'shape'
@@ -61,6 +79,10 @@ export interface SlideElement {
   font_family?: string
   bold?: boolean
   italic?: boolean
+  /** Formatação por trecho. Ausente = a caixa toda usa o formato acima. */
+  runs?: TextRun[]
+  /** Espaçamento entre linhas como múltiplo (1 = simples), como no PowerPoint. */
+  line_spacing?: number
   align?: 'left' | 'center' | 'right'
   color?: string
   pinned?: boolean
@@ -81,9 +103,44 @@ export const FONT_FAMILIES = [
   'Georgia',
   'Times New Roman',
   'Courier New',
+  // Fonte de interface coreana do Windows: é o que sustenta um deck em ko sem
+  // cair em caixinhas. No navegador Linux não existe — daí a pilha de reserva.
+  'Malgun Gothic',
 ] as const
 
 export const DEFAULT_FONT = 'Calibri'
+
+/**
+ * Pilha CSS da família, para a pré-visualização não trocar de fonte sozinha
+ * numa máquina que não tem a do PowerPoint. O primeiro nome é sempre o que
+ * vai para o .pptx; o resto só existe na tela.
+ */
+const FONT_FALLBACKS: Record<string, string> = {
+  'Malgun Gothic': "'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Nanum Gothic', sans-serif",
+  Calibri: "Calibri, Carlito, 'Segoe UI', sans-serif",
+  Arial: "Arial, 'Liberation Sans', Helvetica, sans-serif",
+  'Times New Roman': "'Times New Roman', 'Liberation Serif', Times, serif",
+  'Courier New': "'Courier New', 'Liberation Mono', monospace",
+}
+
+export function fontStack(family?: string | null): string {
+  const nome = family ?? DEFAULT_FONT
+  return FONT_FALLBACKS[nome] ?? `'${nome}', sans-serif`
+}
+
+/** Espaçamentos oferecidos no editor (múltiplo da linha, como no PowerPoint). */
+export const LINE_SPACINGS = [1, 1.15, 1.5, 2] as const
+
+/**
+ * Entrelinha do espaçamento "simples" na tela. O PowerPoint usa a métrica da
+ * fonte (~1.2); 1.25 é o valor que a pré-visualização já usava, mantido para
+ * o deck não mudar de aparência por causa desta funcionalidade.
+ */
+export const SINGLE_LINE_HEIGHT = 1.25
+
+export function cssLineHeight(spacing?: number | null): number {
+  return SINGLE_LINE_HEIGHT * (spacing && spacing > 0 ? spacing : 1)
+}
 
 export type SlideKind = 'cover' | 'custom'
 

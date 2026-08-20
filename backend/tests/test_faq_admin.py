@@ -147,15 +147,99 @@ def test_notify_users_admin_only(ctx):
     c = ctx["c"]
     assert c.get("/api/faq/notify-users", headers=H(ctx["ua"])).status_code == 403
     assert c.get("/api/faq/notify-users", headers=H(ctx["root"])).status_code == 200
-    # adiciona por matrícula
+    # cadastro é pelo E-MAIL da pessoa (era pela matrícula)
     lst = c.post("/api/faq/notify-users", headers=H(ctx["root"]),
-                 json={"employee_id": "FAQA"}).json()
-    assert any(u["employee_id"] == "FAQA" for u in lst)
-    # matrícula inexistente -> 400 field error
+                 json={"email": "faq_a@qwitest.com"}).json()
+    assert any(u["email"] == "faq_a@qwitest.com" for u in lst)
+
+
+def test_notify_users_email_desconhecido_da_erro_de_campo(ctx):
+    c = ctx["c"]
     bad = c.post("/api/faq/notify-users", headers=H(ctx["root"]),
-                 json={"employee_id": "NAOEXISTE"})
+                 json={"email": "ninguem@qwitest.com"})
     assert bad.status_code == 400
-    assert bad.json()["detail"]["field"] == "employee_id"
+    assert bad.json()["detail"]["field"] == "email"
+
+
+def test_notify_users_email_nao_diferencia_maiusculas(ctx):
+    """O cadastro grava em minúsculas; digitar com maiúscula não pode falhar."""
+    c = ctx["c"]
+    lst = c.post("/api/faq/notify-users", headers=H(ctx["root"]),
+                 json={"email": "FAQ_B@QWITEST.COM"})
+    assert lst.status_code == 200
+    assert any(u["email"] == "faq_b@qwitest.com" for u in lst.json())
+
+
+def test_notify_users_recusa_texto_que_nao_e_email(ctx):
+    c = ctx["c"]
+    assert c.post("/api/faq/notify-users", headers=H(ctx["root"]),
+                  json={"email": "FAQA"}).status_code == 422
+
+
+# ── conta root: teste, não conteúdo da equipe ────────────────────────────────
+
+def test_solicitacao_aberta_pela_root_nao_e_publica(ctx):
+    """A root usa o FAQ para RESPONDER; o que ela abre é teste dela."""
+    c = ctx["c"]
+    rid = c.post("/api/faq", headers=H(ctx["root"]),
+                 json={"title": "Teste do admin", "description": "Verificando o fluxo."})
+    assert rid.status_code == 201
+    fid = rid.json()["id"]
+
+    for token in (ctx["ua"], ctx["ub"]):
+        visiveis = c.get("/api/faq", headers=H(token)).json()
+        assert all(x["id"] != fid for x in visiveis)
+        assert all(x["title"] != "Teste do admin" for x in visiveis)
+
+    # ...mas a própria root continua vendo a dela.
+    assert any(x["id"] == fid for x in c.get("/api/faq", headers=H(ctx["root"])).json())
+
+
+def test_resposta_da_root_continua_publica(ctx):
+    """O oposto do teste acima: responder é justamente o papel da conta."""
+    c = ctx["c"]
+    fid = c.post("/api/faq", headers=H(ctx["ua"]),
+                 json={"title": "Dúvida real", "description": "Como faço X?"}).json()["id"]
+    c.put(f"/api/faq/{fid}", headers=H(ctx["root"]),
+          json={"response": "Faça assim.", "close": True})
+
+    visiveis = c.get("/api/faq", headers=H(ctx["ub"])).json()
+    alvo = next(x for x in visiveis if x["id"] == fid)
+    assert alvo["admin_response"] == "Faça assim."
+
+
+def test_weekly_da_root_nao_aparece_para_usuario_real(ctx):
+    """Nada criado na conta de teste pode chegar a quem usa o sistema."""
+    c = ctx["c"]
+    manual = {"slides": [{"id": "s0", "kind": "cover", "elements": [
+        {"id": "t", "type": "text", "x": 0.1, "y": 0.3, "w": 0.8, "h": 0.15,
+         "text": "Teste do admin", "font_size": 40}]}]}
+    aid = c.post("/api/activities", headers=H(ctx["root"]),
+                 json={"title": "ativ do admin", "include_in_weekly": True}).json()["id"]
+    gerado = c.post("/api/weekly/generate", headers=H(ctx["root"]),
+                    json={"activity_ids": [aid], "week_number": 31, "year": 2026,
+                          "layout": manual, "layout_source": "manual"})
+    assert gerado.status_code == 200
+    rid = gerado.json()["id"]
+
+    root_id = c.get("/api/users/profile", headers=H(ctx["root"])).json()["id"]
+    # Colega do mesmo setor da root (CSI) e cargo de gestão não bastam.
+    gestor = _register_login(c, "gestor_csi@qwitest.com", "GCSI", sector="CSI")
+    for token in (ctx["ua"], gestor):
+        assert c.get(f"/api/weekly/{rid}", headers=H(token)).status_code == 403
+        assert c.get(f"/api/weekly/{rid}/download", headers=H(token)).status_code == 403
+        assert c.get(f"/api/weekly/user/{root_id}", headers=H(token)).status_code == 403
+
+    # A própria root continua com acesso ao que criou.
+    assert c.get(f"/api/weekly/{rid}", headers=H(ctx["root"])).status_code == 200
+
+
+def test_root_nao_pode_ser_escolhida_para_compartilhar(ctx):
+    """Listar a root numa tela de compartilhamento exporia a conta de teste."""
+    c = ctx["c"]
+    r = c.post("/api/users/me/access-grants", headers=H(ctx["ua"]),
+               json={"employee_id": "ROOT"})
+    assert r.status_code == 400
 
 
 def test_delete_weekly_owner_and_permissions(ctx):
@@ -175,3 +259,35 @@ def test_delete_weekly_owner_and_permissions(ctx):
     assert c.delete(f"/api/weekly/{rid}", headers=H(ctx["ua"])).status_code == 204
     # sumiu
     assert c.get(f"/api/weekly/{rid}", headers=H(ctx["ua"])).status_code == 404
+
+
+def test_resumo_do_gestor_ignora_a_conta_root(ctx):
+    """O gestor lê o resumo como trabalho da equipe — teste do admin não entra.
+
+    Exercita o coletor direto: é ele que monta o dossiê que vai ao LLM, e é
+    onde a conta root entrava por ter setor e estar ativa como qualquer um.
+    """
+    from app.api.routes.ai_features import _collect_sector_week
+    from app.models import QualitySector
+
+    c = ctx["c"]
+    membro = _register_login(c, "csi_membro@qwitest.com", "CSIM", sector="CSI")
+    c.post("/api/activities", headers=H(membro),
+           json={"title": "Atividade real da equipe", "include_in_weekly": True})
+    c.post("/api/activities", headers=H(ctx["root"]),
+           json={"title": "Atividade de teste do admin", "include_in_weekly": True})
+
+    from app.services.business import get_week_info
+    semana, ano = get_week_info()
+
+    db = _TestSession()
+    try:
+        usuarios, dossie = _collect_sector_week(db, QualitySector.CSI, ano, semana)
+    finally:
+        db.close()
+
+    assert all(u.is_admin is False for u in usuarios)
+    assert all(entrada["name"] != "Administrador" for entrada in dossie)
+    titulos = [a["title"] for entrada in dossie for a in entrada["activities"]]
+    assert "Atividade de teste do admin" not in titulos
+    assert "Atividade real da equipe" in titulos

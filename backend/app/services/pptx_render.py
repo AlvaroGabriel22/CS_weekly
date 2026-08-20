@@ -68,6 +68,15 @@ def _font_of(element: dict | None) -> tuple[str, float, bool, bool]:
     return family, size, bool(element.get("bold")), bool(element.get("italic"))
 
 
+def _spacing_of(element: dict | None) -> float:
+    """Espaçamento entre linhas da caixa do modelo (1.0 = simples)."""
+    try:
+        valor = float((element or {}).get("line_spacing") or 1.0)
+    except (TypeError, ValueError):
+        return 1.0
+    return valor if valor > 0 else 1.0
+
+
 def _box_inches(shape) -> tuple[float, float]:
     """Área útil da caixa, em polegadas, já descontadas as margens internas."""
     largura = float(shape.width or 0) / EMU_PER_INCH - INSET_W
@@ -86,6 +95,7 @@ def _fit_lines(
     resolve é que cortamos de fato.
     """
     family, size, bold, italic = _font_of(element)
+    espacamento = _spacing_of(element)
     largura, altura = _box_inches(shape)
 
     corpo = size
@@ -95,7 +105,7 @@ def _fit_lines(
             for linha in lines
             for fragmento in tm.wrap_text(linha, largura, family, corpo, bold, italic)
         ]
-        altura_linha = tm.line_height(family, corpo, bold, italic)
+        altura_linha = tm.line_height(family, corpo, bold, italic, espacamento)
         total = len(quebradas) * altura_linha
         if total <= altura or corpo - tm.SHRINK_STEP_PT < tm.MIN_FONT_PT:
             break

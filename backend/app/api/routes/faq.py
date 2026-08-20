@@ -4,12 +4,17 @@
   visível para todos (para não abrirem a mesma).
 - Ao abrir, um e-mail é enviado (best-effort) aos usuários que o admin definiu.
 - Só o usuário root/admin (is_admin) fecha e responde.
+
+A conta root é de TESTE e administração. O que ela escreve como SOLICITAÇÃO
+não é público: aparece só para ela mesma, e não dispara e-mail. As RESPOSTAS
+dela continuam públicas — é para isso que a conta existe.
 """
 import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_root
@@ -48,7 +53,9 @@ class BugResponse(BaseModel):
 
 
 class NotifyUserRequest(BaseModel):
-    employee_id: str = Field(min_length=1, max_length=50)
+    # O admin cadastra pelo E-MAIL da pessoa: é o dado que ele tem em mãos ao
+    # decidir quem recebe o aviso, e o mesmo que vai no campo "Para".
+    email: EmailStr
 
 
 class NotifyUserResponse(BaseModel):
@@ -128,8 +135,19 @@ def list_reports(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Todas as solicitações (abertas e fechadas), visíveis a todos os usuários."""
-    reports = db.query(BugReport).order_by(BugReport.created_at.desc()).all()
+    """Solicitações visíveis ao usuário (abertas e fechadas).
+
+    As abertas pela conta root ficam de fora para os demais: ela é conta de
+    teste, e um teste do administrador não é assunto da equipe.
+    """
+    query = db.query(BugReport)
+    if not current_user.is_admin:
+        query = query.filter(
+            ~BugReport.user_id.in_(
+                db.query(User.id).filter(User.is_admin == True)  # noqa: E712
+            )
+        )
+    reports = query.order_by(BugReport.created_at.desc()).all()
     return [_serialize(r, current_user) for r in reports]
 
 
@@ -150,7 +168,9 @@ def create_report(
     db.add(report)
     db.commit()
     db.refresh(report)
-    _send_faq_email(db, report, current_user)
+    # Solicitação da conta root é teste: não avisa ninguém.
+    if not current_user.is_admin:
+        _send_faq_email(db, report, current_user)
     return _serialize(report, current_user)
 
 
@@ -205,13 +225,22 @@ def add_notify_user(
     current_user: User = Depends(require_root),
     db: Session = Depends(get_db),
 ):
-    """Adiciona um usuário (pela matrícula) à lista de avisos do FAQ."""
+    """Adiciona um usuário à lista de avisos do FAQ pelo e-mail dele."""
     from fastapi import HTTPException
-    target = db.query(User).filter(User.employee_id == data.employee_id.strip()).first()
+
+    email = data.email.strip().lower()
+    # O e-mail é gravado em minúsculas no cadastro, mas comparar sem
+    # normalizar deixaria "Nome@Empresa.com" dar "não encontrado".
+    target = db.query(User).filter(func.lower(User.email) == email).first()
     if not target:
         raise HTTPException(400, detail={
-            "field": "employee_id", "message": "Matrícula não encontrada.",
-            "hint": "Confira o número com o colega.",
+            "field": "email", "message": "E-mail não encontrado.",
+            "hint": "O e-mail precisa ser o mesmo cadastrado no QWI.",
+        })
+    if not target.is_active:
+        raise HTTPException(400, detail={
+            "field": "email", "message": "Este usuário está inativo.",
+            "hint": "Reative a conta antes de incluí-la nos avisos.",
         })
     exists = db.query(FaqNotifyUser).filter(FaqNotifyUser.user_id == target.id).first()
     if not exists:

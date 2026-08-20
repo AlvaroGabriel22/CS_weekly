@@ -6,7 +6,7 @@
  * - POST   /faq                       → BugReport    ({ title, description })
  * - PUT    /faq/:id                   → BugReport    ({ response?, close }) — SÓ root
  * - GET    /faq/notify-users          → FaqNotifyUser[] — SÓ root
- * - POST   /faq/notify-users          → FaqNotifyUser[] ({ employee_id }) — SÓ root
+ * - POST   /faq/notify-users          → FaqNotifyUser[] ({ email }) — SÓ root
  * - DELETE /faq/notify-users/:userId  → FaqNotifyUser[] — SÓ root
  *
  * Erros: os consumidores tratam via parseApiError (nunca ler err.response.data direto).
@@ -72,10 +72,15 @@ export function useFaqNotifyUsers(enabled: boolean) {
   })
 }
 
-/** Adiciona um destinatário por matrícula (SÓ root). Retorna a lista atualizada. */
+/**
+ * Adiciona um destinatário pelo E-MAIL dele (SÓ root). Retorna a lista atualizada.
+ *
+ * O e-mail precisa ser o mesmo cadastrado no QWI: a lista é de usuários do
+ * sistema, não de endereços avulsos.
+ */
 export function useAddFaqNotifyUser() {
   const queryClient = useQueryClient()
-  return useMutation<FaqNotifyUser[], unknown, { employee_id: string }>({
+  return useMutation<FaqNotifyUser[], unknown, { email: string }>({
     mutationFn: async (body) => (await api.post<FaqNotifyUser[]>('/faq/notify-users', body)).data,
     onSuccess: (data) => queryClient.setQueryData(NOTIFY_KEY, data),
   })

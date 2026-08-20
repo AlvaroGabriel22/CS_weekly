@@ -40,6 +40,7 @@ from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
+from pptx.oxml.ns import qn
 from pptx.util import Inches, Pt
 
 logger = logging.getLogger(__name__)
@@ -81,6 +82,77 @@ def _as_lines(value: Any) -> list[str]:
                     lines.append(text.strip())
         return lines
     return [str(value)]
+
+
+# Fontes que cobrem CJK: nelas o nome também vai para a tipografia "east
+# asian" do run. Sem isso o PowerPoint escreve o texto coreano com a fonte do
+# TEMA, e escolher Malgun Gothic não muda nada na tela — que é justamente o
+# caso de uso dela. Só estas: forçar `ea` numa fonte sem glifos coreanos
+# trocaria o texto por caixinhas em vez de deixar o tema resolver.
+_CJK_FONTS = {"malgun gothic"}
+
+
+def _set_font_name(run: Any, name: str) -> None:
+    """Aplica a família ao run (latina e, quando for o caso, east asian)."""
+    run.font.name = name
+    if name.strip().lower() not in _CJK_FONTS:
+        return
+    rPr = run.font._rPr
+    ea = rPr.find(qn("a:ea"))
+    if ea is None:
+        ea = rPr.makeelement(qn("a:ea"), {})
+        latin = rPr.find(qn("a:latin"))
+        # A ordem do schema é ... latin, ea, cs ...: inserir fora dela produz
+        # um arquivo que o PowerPoint recusa a abrir.
+        if latin is not None:
+            latin.addnext(ea)
+        else:
+            rPr.append(ea)
+    ea.set("typeface", name)
+
+
+def _line_spacing(element: dict[str, Any]) -> float | None:
+    """Espaçamento entre linhas como MÚLTIPLO (1.0 = simples). None = herdar."""
+    valor = element.get("line_spacing")
+    if valor in (None, ""):
+        return None
+    try:
+        numero = float(valor)
+    except (TypeError, ValueError):
+        return None
+    return numero if 0.5 <= numero <= 3.0 else None
+
+
+def _run_paragraphs(element: dict[str, Any]) -> list[list[dict[str, Any]]] | None:
+    """Converte `runs` do editor em parágrafos de trechos.
+
+    None quando o elemento não tem formatação por trecho — aí vale o caminho
+    antigo, de um formato só para a caixa toda.
+
+    A quebra de linha mora DENTRO do texto do trecho (o editor guarda o texto
+    corrido), então é aqui que ela vira parágrafo do PowerPoint. Um trecho que
+    fica vazio depois da quebra não é descartado à toa: `[""]` mantém a linha
+    em branco que o usuário digitou.
+    """
+    runs = element.get("runs")
+    if not isinstance(runs, list) or not runs:
+        return None
+
+    paragrafos: list[list[dict[str, Any]]] = [[]]
+    for run in runs:
+        if not isinstance(run, dict):
+            continue
+        texto = str(run.get("text") or "")
+        partes = texto.split("\n")
+        for indice, parte in enumerate(partes):
+            if indice:
+                paragrafos.append([])
+            if parte:
+                paragrafos[-1].append({**run, "text": parte})
+
+    # Parágrafo sem nenhum trecho = linha em branco: precisa de um run vazio,
+    # senão o PowerPoint colapsa a linha e o espaçamento do usuário some.
+    return [p if p else [{"text": ""}] for p in paragrafos]
 
 
 def resolve_binding(binding: str, structured: dict[str, Any]) -> list[str]:
@@ -232,17 +304,41 @@ class PptxLayoutRenderer:
         font_name = str(element.get("font_family") or "Calibri")
         color = _hex_to_rgb(element.get("color"))
         align = _ALIGN.get(str(element.get("align") or "left"), PP_ALIGN.LEFT)
+        spacing = _line_spacing(element)
+
+        # Formatação por TRECHO: o usuário pode ter deixado só um pedaço em
+        # negrito ou maior. Sem `runs`, a caixa inteira usa o formato do
+        # elemento — que é o caso da esmagadora maioria e do conteúdo da IA.
+        paragraphs = _run_paragraphs(element) if not binding else None
+
+        if paragraphs is not None:
+            for index, pieces in enumerate(paragraphs):
+                paragraph = frame.paragraphs[0] if index == 0 else frame.add_paragraph()
+                paragraph.alignment = align
+                if spacing:
+                    paragraph.line_spacing = spacing
+                for piece in pieces:
+                    run = paragraph.add_run()
+                    run.text = piece["text"]
+                    run.font.size = Pt(float(piece.get("font_size") or element.get("font_size", 14)))
+                    run.font.bold = bool(piece.get("bold", bold))
+                    run.font.italic = bool(piece.get("italic", italic))
+                    run.font.color.rgb = _hex_to_rgb(piece.get("color") or element.get("color"))
+                    _set_font_name(run, str(piece.get("font_family") or font_name))
+            return
 
         for index, line in enumerate(lines):
             paragraph = frame.paragraphs[0] if index == 0 else frame.add_paragraph()
             paragraph.alignment = align
+            if spacing:
+                paragraph.line_spacing = spacing
             run = paragraph.add_run()
             run.text = f"• {line}" if bullet else line
             run.font.size = size
             run.font.bold = bold
             run.font.italic = italic
             run.font.color.rgb = color
-            run.font.name = font_name
+            _set_font_name(run, font_name)
 
     def _render_table(
         self,

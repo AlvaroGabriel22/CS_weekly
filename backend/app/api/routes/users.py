@@ -34,9 +34,15 @@ def can_view_user_weeklys(viewer: User, owner: User, db: Session | None = None) 
     - Concessão pessoal: o DONO pode liberar colegas específicos de outros
       setores pela matrícula (weekly_access_grants) — checada quando `db`
       é fornecido.
+    - Conta root/admin: o que ela cria é INVISÍVEL para os usuários reais.
     """
     if viewer.id == owner.id or viewer.is_admin:
         return True
+    # A conta root é de teste e administração: os weeklies, anexos e
+    # apresentações criados nela nunca podem aparecer para quem usa o sistema
+    # de verdade — nem por setor, nem por cargo de gestão, nem por concessão.
+    if owner.is_admin:
+        return False
     if viewer.role in MANAGEMENT_ROLES:
         return True
     if viewer.sector == owner.sector:
@@ -353,6 +359,10 @@ def add_access_grant(
         .filter(
             User.employee_id == data.employee_id.strip(),
             User.is_active.is_(True),
+            # A conta root não aparece no organograma nem pode ser escolhida
+            # aqui: ela já enxerga tudo, e listá-la exporia uma conta que os
+            # usuários não deveriam sequer ver.
+            User.is_admin.is_(False),
         )
         .first()
     )

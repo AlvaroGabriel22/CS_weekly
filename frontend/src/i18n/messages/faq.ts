@@ -39,7 +39,11 @@ export const FAQ = defineMessages({
 
   // Destinatários dos e-mails
   notifyTitle: { pt: 'Quem recebe os e-mails', en: 'Who gets the emails', ko: '이메일 수신자' },
-  notifyEmployeeIdPh: { pt: 'Matrícula', en: 'Employee ID', ko: '사번' },
+  notifyEmailPh: {
+    pt: 'E-mail da pessoa',
+    en: "Person's email",
+    ko: '담당자 이메일',
+  },
   notifyEmpty: { pt: 'Ninguém cadastrado', en: 'Nobody added', ko: '등록된 사람 없음' },
   notifyAdded: { pt: 'Adicionado.', en: 'Added.', ko: '추가됨.' },
   notifyRemoved: { pt: 'Removido.', en: 'Removed.', ko: '삭제됨.' },

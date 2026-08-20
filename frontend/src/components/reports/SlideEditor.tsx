@@ -19,12 +19,14 @@ import {
   useState,
   type CSSProperties,
   type DragEvent as ReactDragEvent,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import {
   AlignCenter,
   AlignLeft,
   AlignRight,
+  StretchVertical,
   ArrowDown,
   ArrowUp,
   Bold,
@@ -63,11 +65,24 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 import { useAttachmentImage } from '@/hooks/useSlideEditor'
+import { RichText } from './RichText'
+import {
+  applyFormatToRange,
+  applyTextEdit,
+  elementRuns,
+  formatOfRange,
+  replaceRange,
+  runsPatch,
+  type RunFormat,
+} from './richText'
 import {
   buildContentBlocks,
+  cssLineHeight,
   DEFAULT_FONT,
   DESIGN_WIDTH,
   FONT_FAMILIES,
+  fontStack,
+  LINE_SPACINGS,
   elementFromBlock,
   newId,
   newShape,
@@ -264,12 +279,12 @@ function ElementContent({
 
   const style: CSSProperties = {
     fontSize: element.font_size * scale,
-    fontFamily: element.font_family ?? DEFAULT_FONT,
+    fontFamily: fontStack(element.font_family),
     fontWeight: element.bold ? 700 : 400,
     fontStyle: element.italic ? 'italic' : 'normal',
     textAlign: element.align ?? 'left',
     color: element.color ?? COLORS.dark,
-    lineHeight: 1.25,
+    lineHeight: cssLineHeight(element.line_spacing),
     overflow: 'hidden',
     whiteSpace: 'pre-wrap',
     wordBreak: 'break-word',
@@ -289,7 +304,11 @@ function ElementContent({
       </div>
     )
   }
-  return <div style={style}>{element.text}</div>
+  return (
+    <div style={style}>
+      <RichText element={element} scale={scale} />
+    </div>
+  )
 }
 
 // ── miniatura de slide (rail) ───────────────────────────────────────────────
@@ -417,6 +436,16 @@ export function SlideEditor({ deck, onChange, activities, onPinnedChange }: Slid
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null)
   const [editingElementId, setEditingElementId] = useState<string | null>(null)
   const [editingText, setEditingText] = useState('')
+  /**
+   * Trecho marcado com o mouse dentro da caixa em edição.
+   *
+   * Guardado em ESTADO, e não lido do textarea na hora: clicar num menu
+   * (fonte, cor) tira o foco do campo e a seleção do DOM some junto. Assim o
+   * botão ainda sabe a que pedaço o usuário quis aplicar o formato.
+   */
+  const [textSelection, setTextSelection] = useState<
+    { elementId: string; start: number; end: number } | null
+  >(null)
   const [guides, setGuides] = useState<{ v: boolean; h: boolean }>({ v: false, h: false })
   const [dropActive, setDropActive] = useState(false)
   const dragRef = useRef<DragState | null>(null)
@@ -533,16 +562,94 @@ export function SlideEditor({ deck, onChange, activities, onPinnedChange }: Slid
     if (element.type !== 'text' || element.binding) return
     setEditingElementId(element.id)
     setEditingText(element.text ?? '')
+    setTextSelection(null)
   }
 
   const commitEditing = useCallback(() => {
     if (!editingElementId || !slide) return
     const current = slide.elements.find(el => el.id === editingElementId)
     if (current && (current.text ?? '') !== editingText) {
-      commit(updateElement(deckRef.current, slide.id, editingElementId, { text: editingText }))
+      // Reaplica os trechos ao texto novo: sem isso, corrigir uma letra
+      // apagaria o negrito que o usuário tinha posto numa palavra.
+      const patch = runsPatch(
+        applyTextEdit(elementRuns(current), current.text ?? '', editingText),
+      )
+      commit(updateElement(deckRef.current, slide.id, editingElementId, patch))
     }
     setEditingElementId(null)
   }, [editingElementId, editingText, slide, commit])
+
+  /**
+   * Impede que o clique na barra tire o foco do campo — sem isto o textarea
+   * some com a marcação e o formato acabaria indo para a caixa inteira.
+   */
+  const keepSelection = (event: ReactMouseEvent) => {
+    if (editingElementId) event.preventDefault()
+  }
+
+  /** Guarda o trecho marcado no campo (vazio = nada marcado). */
+  const rememberSelection = (elementId: string, target: HTMLTextAreaElement) => {
+    const { selectionStart: start, selectionEnd: end } = target
+    setTextSelection(end > start ? { elementId, start, end } : null)
+  }
+
+  /**
+   * Trecho ao qual a barra deve aplicar o formato — ou null para a caixa toda.
+   *
+   * Só vale se ainda apontar para o elemento selecionado: trocar de caixa sem
+   * marcar nada tem que voltar a formatar a caixa inteira.
+   */
+  const activeSelection =
+    textSelection && selectedElementId === textSelection.elementId ? textSelection : null
+
+  /**
+   * Aplica formatação de texto: ao TRECHO marcado, se houver; senão, à caixa
+   * inteira. Foi o pedido literal — e é o comportamento de qualquer editor.
+   */
+  const applyTextFormat = (format: RunFormat) => {
+    if (!slide || !selected || selected.type !== 'text') return
+    const texto = editingElementId === selected.id ? editingText : selected.text ?? ''
+    const base: SlideElement = { ...selected, text: texto }
+    const runs = elementRuns(base)
+
+    if (activeSelection) {
+      const { start, end } = activeSelection
+      const patch = runsPatch(applyFormatToRange(runs, start, end, format))
+      commit(updateElement(deckRef.current, slide.id, selected.id, patch))
+      return
+    }
+
+    // Caixa inteira: o formato vai para o elemento, e o mesmo atributo sai dos
+    // trechos — senão um destaque antigo continuaria vencendo a escolha nova.
+    const limpos = runs.map(run => {
+      const copia = { ...run }
+      for (const key of Object.keys(format) as (keyof RunFormat)[]) delete copia[key]
+      return copia
+    })
+    commit(updateElement(deckRef.current, slide.id, selected.id, {
+      ...format,
+      ...runsPatch(limpos),
+      text: texto,
+    }))
+  }
+
+  /** Formato que a barra deve exibir: o do trecho marcado, ou o da caixa. */
+  const activeFormat: RunFormat = activeSelection && selected
+    ? formatOfRange(
+        elementRuns({
+          ...selected,
+          text: editingElementId === selected.id ? editingText : selected.text ?? '',
+        }),
+        activeSelection.start,
+        activeSelection.end,
+      )
+    : {}
+  const shownBold = activeSelection ? activeFormat.bold ?? selected?.bold : selected?.bold
+  const shownItalic = activeSelection ? activeFormat.italic ?? selected?.italic : selected?.italic
+  const shownFontSize = (activeSelection ? activeFormat.font_size : undefined)
+    ?? selected?.font_size
+  const shownFontFamily = (activeSelection ? activeFormat.font_family : undefined)
+    ?? selected?.font_family ?? DEFAULT_FONT
 
   // ── drag / resize de elementos ────────────────────────────────────────────
 
@@ -671,10 +778,11 @@ export function SlideEditor({ deck, onChange, activities, onPinnedChange }: Slid
 
   const stepFont = (direction: 1 | -1) => {
     if (!selected) return
-    const index = FONT_SIZES.findIndex(size => size >= selected.font_size)
+    const atual = shownFontSize ?? selected.font_size
+    const index = FONT_SIZES.findIndex(size => size >= atual)
     const currentIndex = index === -1 ? FONT_SIZES.length - 1 : index
     const nextIndex = Math.min(Math.max(currentIndex + direction, 0), FONT_SIZES.length - 1)
-    patchSelected({ font_size: FONT_SIZES[nextIndex] })
+    applyTextFormat({ font_size: FONT_SIZES[nextIndex] })
   }
 
   const addText = () => {
@@ -700,6 +808,47 @@ export function SlideEditor({ deck, onChange, activities, onPinnedChange }: Slid
     const element = newShape(shape)
     commit(withElement(deckRef.current, slide.id, element))
     setSelectedElementId(element.id)
+  }
+
+  /**
+   * Traduz SÓ o trecho marcado com o mouse, preservando o formato dele.
+   *
+   * Devolve false quando não há trecho marcado — aí quem chamou segue para a
+   * tradução do deck inteiro, que é o comportamento de sempre.
+   */
+  const translateSelection = async (target: 'pt' | 'en' | 'ko'): Promise<boolean> => {
+    if (!slide || !selected || !activeSelection) return false
+    const texto = editingElementId === selected.id ? editingText : selected.text ?? ''
+    const { start, end } = activeSelection
+    const trecho = texto.slice(start, end)
+    if (!trecho.trim()) return false
+
+    setTranslating(true)
+    try {
+      const res = await api.post('/ai/translate', { texts: [trecho], target })
+      const traduzido: string = res.data.texts?.[0] ?? trecho
+      const runs = replaceRange(
+        elementRuns({ ...selected, text: texto }), start, end, traduzido,
+      )
+      const patch = runsPatch(runs)
+      commit(updateElement(deckRef.current, slide.id, selected.id, patch))
+      // O campo em edição precisa acompanhar: senão, ao sair da caixa, o texto
+      // antigo do textarea desfaria a tradução que acabou de ser aplicada.
+      if (editingElementId === selected.id) setEditingText(patch.text ?? texto)
+      setTextSelection(null)
+      toast.success(t(REPORTS.translated))
+    } catch (err) {
+      toast.error(parseApiError(err).message)
+    } finally {
+      setTranslating(false)
+    }
+    return true
+  }
+
+  /** Trecho marcado, se houver; senão, o deck inteiro. */
+  const translate = async (target: 'pt' | 'en' | 'ko') => {
+    if (await translateSelection(target)) return
+    await translateDeck(target)
   }
 
   /**
@@ -870,8 +1019,8 @@ export function SlideEditor({ deck, onChange, activities, onPinnedChange }: Slid
             <DropdownMenuTrigger
               className={toolButton}
               disabled={translating}
-              aria-label={t(REPORTS.translate)}
-              title={t(REPORTS.translate)}
+              aria-label={t(activeSelection ? REPORTS.translateSelection : REPORTS.translate)}
+              title={t(activeSelection ? REPORTS.translateSelection : REPORTS.translate)}
             >
               {translating ? (
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
@@ -883,21 +1032,40 @@ export function SlideEditor({ deck, onChange, activities, onPinnedChange }: Slid
               </span>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
-              <DropdownMenuItem onSelect={() => translateDeck('pt')}>🇧🇷 Português</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => translateDeck('en')}>🇺🇸 English</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => translateDeck('ko')}>🇰🇷 한국어</DropdownMenuItem>
+              {activeSelection && (
+                <p className="px-2 py-1 text-[11px] text-muted-foreground">
+                  {t(REPORTS.translateSelection)}
+                </p>
+              )}
+              <DropdownMenuItem onSelect={() => translate('pt')}>🇧🇷 Português</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => translate('en')}>🇺🇸 English</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => translate('ko')}>🇰🇷 한국어</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 
           <span className="mx-1 h-5 w-px bg-border" aria-hidden />
 
-          <button type="button" className={toolButton} disabled={!isTextSelected} onClick={() => stepFont(-1)} aria-label={t(REPORTS.fontSmaller)} title={t(REPORTS.fontSmaller)}>
+          {/*
+            Diz a que a formatação vai ser aplicada. Sem isto o usuário clica
+            em negrito e não sabe se pegou a palavra marcada ou a caixa toda —
+            e o efeito só aparece ao sair da edição.
+          */}
+          {activeSelection && (
+            <span
+              className="rounded bg-brand-50 px-1.5 py-0.5 text-[11px] font-medium text-brand"
+              title={t(REPORTS.formattingSelectionHint)}
+            >
+              {t(REPORTS.formattingSelection)}
+            </span>
+          )}
+
+          <button type="button" className={toolButton} disabled={!isTextSelected} onMouseDown={keepSelection} onClick={() => stepFont(-1)} aria-label={t(REPORTS.fontSmaller)} title={t(REPORTS.fontSmaller)}>
             <Minus className="h-4 w-4" aria-hidden />
           </button>
           <span className="min-w-7 text-center text-xs tabular-nums text-gray-600">
-            {isTextSelected ? `${selected?.font_size}` : '–'}
+            {isTextSelected ? `${shownFontSize}` : '–'}
           </span>
-          <button type="button" className={toolButton} disabled={!isTextSelected} onClick={() => stepFont(1)} aria-label={t(REPORTS.fontLarger)} title={t(REPORTS.fontLarger)}>
+          <button type="button" className={toolButton} disabled={!isTextSelected} onMouseDown={keepSelection} onClick={() => stepFont(1)} aria-label={t(REPORTS.fontLarger)} title={t(REPORTS.fontLarger)}>
             <Plus className="h-4 w-4" aria-hidden />
           </button>
           {/* Família tipográfica (web-safe + PowerPoint) */}
@@ -910,43 +1078,43 @@ export function SlideEditor({ deck, onChange, activities, onPinnedChange }: Slid
             >
               <span
                 className="truncate text-xs"
-                style={{ fontFamily: selected?.font_family ?? DEFAULT_FONT }}
+                style={{ fontFamily: fontStack(shownFontFamily) }}
               >
-                {selected?.font_family ?? DEFAULT_FONT}
+                {shownFontFamily}
               </span>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto">
               {FONT_FAMILIES.map(family => (
                 <DropdownMenuItem
                   key={family}
-                  onSelect={() => patchSelected({ font_family: family })}
-                  className={cn(
-                    (selected?.font_family ?? DEFAULT_FONT) === family && 'bg-brand-50 text-brand',
-                  )}
+                  onSelect={() => applyTextFormat({ font_family: family })}
+                  className={cn(shownFontFamily === family && 'bg-brand-50 text-brand')}
                 >
-                  <span style={{ fontFamily: family }}>{family}</span>
+                  <span style={{ fontFamily: fontStack(family) }}>{family}</span>
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
           <button
             type="button"
-            className={cn(toolButton, selected?.bold && 'bg-brand-50 text-brand')}
+            className={cn(toolButton, shownBold && 'bg-brand-50 text-brand')}
             disabled={!isTextSelected}
-            onClick={() => patchSelected({ bold: !selected?.bold })}
+            onMouseDown={keepSelection}
+            onClick={() => applyTextFormat({ bold: shownBold ? undefined : true })}
             aria-label={t(REPORTS.bold)}
-            aria-pressed={!!selected?.bold}
+            aria-pressed={!!shownBold}
             title={t(REPORTS.bold)}
           >
             <Bold className="h-4 w-4" aria-hidden />
           </button>
           <button
             type="button"
-            className={cn(toolButton, selected?.italic && 'bg-brand-50 text-brand')}
+            className={cn(toolButton, shownItalic && 'bg-brand-50 text-brand')}
             disabled={!isTextSelected}
-            onClick={() => patchSelected({ italic: !selected?.italic })}
+            onMouseDown={keepSelection}
+            onClick={() => applyTextFormat({ italic: shownItalic ? undefined : true })}
             aria-label={t(REPORTS.italic)}
-            aria-pressed={!!selected?.italic}
+            aria-pressed={!!shownItalic}
             title={t(REPORTS.italic)}
           >
             <Italic className="h-4 w-4" aria-hidden />
@@ -971,6 +1139,38 @@ export function SlideEditor({ deck, onChange, activities, onPinnedChange }: Slid
             </button>
           ))}
 
+          {/*
+            Espaçamento entre linhas. Vale para a CAIXA inteira: no PowerPoint
+            ele é do parágrafo, e o editor trata a caixa como um bloco só —
+            aplicar por trecho não teria como sair fiel no arquivo.
+          */}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              className={cn(toolButton, 'gap-1')}
+              disabled={!isTextSelected}
+              aria-label={t(REPORTS.lineSpacing)}
+              title={t(REPORTS.lineSpacing)}
+            >
+              <StretchVertical className="h-4 w-4" aria-hidden />
+              <span className="text-xs tabular-nums">
+                {isTextSelected ? (selected?.line_spacing ?? 1) : '–'}
+              </span>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              {LINE_SPACINGS.map(spacing => (
+                <DropdownMenuItem
+                  key={spacing}
+                  onSelect={() => patchSelected({ line_spacing: spacing })}
+                  className={cn(
+                    (selected?.line_spacing ?? 1) === spacing && 'bg-brand-50 text-brand',
+                  )}
+                >
+                  {spacing === 1 ? `1,0 · ${t(REPORTS.lineSpacingSingle)}` : String(spacing).replace('.', ',')}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           {/* Cor (texto/contorno/cabeçalho de tabela) */}
           <DropdownMenu>
             <DropdownMenuTrigger
@@ -989,7 +1189,8 @@ export function SlideEditor({ deck, onChange, activities, onPinnedChange }: Slid
                     type="button"
                     className={cn('h-6 w-6 rounded-full border-2', selected?.color === color ? 'border-gray-900' : 'border-gray-200')}
                     style={{ background: color }}
-                    onClick={() => patchSelected({ color })}
+                    onMouseDown={keepSelection}
+                    onClick={() => applyTextFormat({ color })}
                     aria-label={color}
                   />
                 ))}
@@ -1107,7 +1308,11 @@ export function SlideEditor({ deck, onChange, activities, onPinnedChange }: Slid
                   <textarea
                     autoFocus
                     value={editingText}
-                    onChange={e => setEditingText(e.target.value)}
+                    onChange={e => {
+                      setEditingText(e.target.value)
+                      rememberSelection(element.id, e.target)
+                    }}
+                    onSelect={e => rememberSelection(element.id, e.currentTarget)}
                     onBlur={commitEditing}
                     onKeyDown={e => {
                       e.stopPropagation()
@@ -1118,12 +1323,12 @@ export function SlideEditor({ deck, onChange, activities, onPinnedChange }: Slid
                     className="h-full w-full resize-none border-0 bg-blue-50/40 p-0 outline-none"
                     style={{
                       fontSize: element.font_size * scale,
-                      fontFamily: element.font_family ?? DEFAULT_FONT,
+                      fontFamily: fontStack(element.font_family),
                       fontWeight: element.bold ? 700 : 400,
                       fontStyle: element.italic ? 'italic' : 'normal',
                       textAlign: element.align ?? 'left',
                       color: element.color ?? COLORS.dark,
-                      lineHeight: 1.25,
+                      lineHeight: cssLineHeight(element.line_spacing),
                     }}
                     aria-label={t(REPORTS.addText)}
                   />

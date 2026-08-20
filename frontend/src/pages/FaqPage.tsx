@@ -302,22 +302,22 @@ function NotifyUsersCard() {
   const query = useFaqNotifyUsers(true)
   const add = useAddFaqNotifyUser()
   const remove = useRemoveFaqNotifyUser()
-  const [employeeId, setEmployeeId] = useState('')
+  const [email, setEmail] = useState('')
   const [fieldError, setFieldError] = useState<FieldErrorInfo | null>(null)
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault()
     setFieldError(null)
     add.mutate(
-      { employee_id: employeeId.trim() },
+      { email: email.trim() },
       {
         onSuccess: () => {
-          setEmployeeId('')
+          setEmail('')
           toast.success(t(FAQ.notifyAdded))
         },
         onError: (err) => {
           const parsed = parseApiError(err)
-          const info = parsed.fields.employee_id
+          const info = parsed.fields.email
           if (info) setFieldError(info)
           else toast.error(parsed.message)
         },
@@ -344,10 +344,12 @@ function NotifyUsersCard() {
       <form onSubmit={handleAdd} className="flex flex-wrap items-start gap-2" noValidate>
         <div className="min-w-0 flex-1 space-y-1">
           <Input
-            value={employeeId}
-            placeholder={t(FAQ.notifyEmployeeIdPh)}
+            type="email"
+            autoComplete="email"
+            value={email}
+            placeholder={t(FAQ.notifyEmailPh)}
             onChange={(e) => {
-              setEmployeeId(e.target.value)
+              setEmail(e.target.value)
               setFieldError(null)
             }}
             disabled={add.isPending}
@@ -365,7 +367,7 @@ function NotifyUsersCard() {
             </div>
           )}
         </div>
-        <Button type="submit" disabled={add.isPending || !employeeId.trim()} className="shrink-0">
+        <Button type="submit" disabled={add.isPending || !email.trim()} className="shrink-0">
           {add.isPending ? (
             <Loader2 className="animate-spin" aria-hidden="true" />
           ) : (

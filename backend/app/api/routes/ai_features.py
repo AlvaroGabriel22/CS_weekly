@@ -150,7 +150,13 @@ def _collect_sector_week(db: Session, sector: QualitySector, year: int, week: in
     """Pessoas do setor + weekly/atividades da semana de cada uma."""
     users = (
         db.query(User)
-        .filter(User.sector == sector, User.is_active.is_(True))
+        .filter(
+            User.sector == sector,
+            User.is_active.is_(True),
+            # A conta root é de teste: o que se cria nela não pode entrar no
+            # resumo que o gestor lê como se fosse trabalho da equipe.
+            User.is_admin.is_(False),
+        )
         .order_by(User.name)
         .all()
     )
