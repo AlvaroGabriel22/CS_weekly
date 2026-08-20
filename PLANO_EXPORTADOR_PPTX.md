@@ -161,11 +161,17 @@ Funções, todas com teste contra o template real:
 
 ### Etapa 5 — Integração
 
-- `use_template` passa a usar o exportador novo **nos dois tipos de template**: PPT enviado e
-  weekly do histórico (que hoje vai pelo LLM — `clone_only` fica `False` e o modelo decide o
-  layout).
-- Remover o ramo de posicionamento por LLM do fluxo de template.
-- Flag de configuração para voltar ao caminho antigo em caso de problema.
+- `use_template` usa o exportador novo quando o modelo é um **PPT enviado**: `deck_content`
+  converte a semana, `deck_plan` decide e `pptx_render` executa a mutação — sem LLM.
+- **Weekly do histórico fica no fluxo antigo** (decisão de 19/08/2026). Motivo: o .pptx guardado
+  desses relatórios não tem slots marcados pelo usuário, só sugestão automática; um slot
+  adivinhado errado trocaria conteúdo de lugar sem ninguém ter revisado. Habilitar exige antes
+  dar ao histórico a mesma marcação de campos que o PPT enviado tem.
+- Editor WYSIWYG **não aparece** para modelo .pptx: as posições são as do arquivo, então o passo
+  vira pré-visualização somente-leitura em vez de prometer uma edição sem efeito.
+- Flag `PPTX_MUTATE_EXPORT` (padrão ligado) volta ao caminho antigo. Além dela, o ramo novo
+  devolve `None` e cai no fluxo antigo sozinho quando o modelo não serve (sem campos marcados,
+  arquivo sumido, dono errado) — falha de modelo não pode impedir o weekly.
 
 ### Etapa 6 — Verificação automática
 
@@ -181,6 +187,22 @@ Verificação visual: LibreOffice **não está instalado** nesta máquina. Insta
 renderizar o .pptx em PNG e comparar automaticamente — fica como opcional recomendado.
 
 ---
+
+## 4b. Estado em 19/08/2026
+
+| Etapa | Situação |
+|---|---|
+| 0 — Higiene | **Feita** — `None.pptx` corrigido no upload (id gerado antes do caminho); órfão validado na leitura |
+| 1 — Primitivas (`pptx_mutate.py`) | **Feita** — 13 testes |
+| 2 — Slots no modelo e na tela | **Feita** — `PATCH /pptx-templates/{id}/slots` + marcação no editor; slot `activity_date` acrescentado |
+| 3 — Planejador (`deck_plan.py`) | **Feita** — 18 testes |
+| 4 — Medição (`text_metrics.py`) | **Feita** — 13 testes |
+| 5 — Integração | **Feita para PPT enviado**; histórico permanece no fluxo antigo (ver acima) |
+| 6 — Verificação automática | **Parcial** — invariantes 2 a 5 cobertas em `test_pptx_render.py`; falta a nº 1 (shape fora da página) e a renderização visual, que depende de instalar `soffice` |
+
+Módulos acrescentados desde a redação do plano: `pptx_render.py` (executa o plano sobre o
+arquivo) e `deck_content.py` (converte Activity/Attachment em `ActivityContent`, mantendo o
+planejador livre do ORM).
 
 ## 5. Riscos
 

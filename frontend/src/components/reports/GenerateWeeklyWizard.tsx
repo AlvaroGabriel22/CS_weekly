@@ -43,6 +43,7 @@ import {
 import { ReviewWeekDialog } from './ReviewWeekDialog'
 import { SendEmailDialog } from './SendEmailDialog'
 import { SlideEditor } from './SlideEditor'
+import { StaticSlidePage } from './SlideStatic'
 import { StepIndicator } from './StepIndicator'
 import { WeekPicker } from './WeekPicker'
 import { buildCoverDeck, pinnedElements, type DeckLabels, type DeckLayout } from './slideLayout'
@@ -177,6 +178,13 @@ export function GenerateWeeklyWizard({ initialWeek, onViewHistory }: GenerateWee
   const [templateChoice, setTemplateChoice] = useState<string>('active')
   // Origem da montagem atual: manual pesa mais no aprendizado do padrão.
   const [deckSource, setDeckSource] = useState<'manual' | 'ai'>('manual')
+  /**
+   * Modelo .pptx que originou o deck atual. Guardado à parte de
+   * `templateChoice` porque este é o que vale na hora de gerar: se o usuário
+   * trocar a escolha sem pedir um rascunho novo, o arquivo que sai continua
+   * sendo o do modelo que está na tela.
+   */
+  const [deckPptxTemplateId, setDeckPptxTemplateId] = useState<string | null>(null)
 
   const activeTemplate = aiStyle.data?.template ?? null
   /** Weeklys do histórico com montagem salva (candidatos a modelo). */
@@ -210,6 +218,7 @@ export function GenerateWeeklyWizard({ initialWeek, onViewHistory }: GenerateWee
         onSuccess: (result) => {
           setDeck(result.layout)
           setDeckSource('ai')
+          setDeckPptxTemplateId(isPptx ? templateChoice.slice('pptx:'.length) : null)
           setStep(1)
           if (result.source === 'ai') toast.success(t(REPORTS.aiDeckDone))
           else if (result.source === 'template') toast.info(t(REPORTS.aiDeckFromTemplate))
@@ -236,6 +245,9 @@ export function GenerateWeeklyWizard({ initialWeek, onViewHistory }: GenerateWee
         language,
         layout: deck ?? undefined,
         layout_source: deckSource,
+        // Com modelo .pptx o backend gera mutando o arquivo do usuário — o
+        // `layout` acima serve só para a pré-visualização.
+        pptx_template_id: deckPptxTemplateId ?? undefined,
       },
       { onSuccess: (report) => setSuccessReport(report) }
     )
@@ -259,6 +271,7 @@ export function GenerateWeeklyWizard({ initialWeek, onViewHistory }: GenerateWee
     setSuccessReport(null)
     setDeck(null)
     setDeckSource('manual')
+    setDeckPptxTemplateId(null)
     setStep(0)
   }
 
@@ -427,12 +440,34 @@ export function GenerateWeeklyWizard({ initialWeek, onViewHistory }: GenerateWee
       {/* ── Passo 2 · Montagem (editor WYSIWYG) ──────────────────────────── */}
       {step === 1 && deck && (
         <div key="step-deck" className="animate-slide-up space-y-4">
-          <SlideEditor
-            deck={deck}
-            onChange={setDeck}
-            activities={includedActivities}
-            onPinnedChange={handlePinnedChange}
-          />
+          {deckPptxTemplateId ? (
+            /*
+             * Modelo .pptx: o arquivo final sai por mutação do próprio .pptx,
+             * então mover elementos aqui não teria efeito nenhum. Mostrar o
+             * editor prometeria um controle que não existe — aqui é só o que
+             * vai sair.
+             */
+            <div className="space-y-3">
+              <div className="rounded-lg border border-border bg-muted/40 p-3">
+                <p className="text-sm font-medium">{t(REPORTS.pptxPreviewTitle)}</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {t(REPORTS.pptxPreviewHint)}
+                </p>
+              </div>
+              <div className="flex flex-wrap justify-center gap-4">
+                {deck.slides.map(slide => (
+                  <StaticSlidePage key={slide.id} slide={slide} width={420} />
+                ))}
+              </div>
+            </div>
+          ) : (
+            <SlideEditor
+              deck={deck}
+              onChange={setDeck}
+              activities={includedActivities}
+              onPinnedChange={handlePinnedChange}
+            />
+          )}
 
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
             <div className="flex flex-col-reverse gap-2 sm:flex-row">

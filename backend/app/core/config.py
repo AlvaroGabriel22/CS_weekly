@@ -76,6 +76,11 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = "uploads"
     MAX_UPLOAD_SIZE_MB: int = 50
 
+    # Exportador de PPTX por MUTAÇÃO do modelo do usuário (deck_plan +
+    # pptx_render) para weeklies gerados a partir de um PPT enviado.
+    # Desligar volta ao renderizador que reconstrói o arquivo do zero.
+    PPTX_MUTATE_EXPORT: bool = True
+
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
 
 

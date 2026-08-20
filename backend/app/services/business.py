@@ -502,6 +502,104 @@ class WeeklyService:
             coverage_score=coverage_score,
         )
 
+    def _generate_by_mutation(
+        self,
+        report: WeeklyReport,
+        user: User,
+        activities: list[Activity],
+        pptx_template_id: str,
+        *,
+        week_number: int,
+        year: int,
+        period_label: str | None,
+    ) -> WeeklyReport | None:
+        """Gera o deck mutando o .pptx que o usuário enviou como modelo.
+
+        Devolve None quando o caminho não se aplica (modelo inexistente, sem
+        campos marcados, arquivo sumido) — aí a geração segue pelo fluxo antigo
+        em vez de falhar. Só o que der certo aqui pula o LLM.
+        """
+        from app.models import PptxTemplate
+        from app.services.deck_content import activities_to_content
+        from app.services.deck_plan import build_plan
+        from app.services.pptx_render import render_plan
+
+        template = (
+            self.db.query(PptxTemplate)
+            .filter(
+                PptxTemplate.id == pptx_template_id,
+                PptxTemplate.user_id == user.id,
+            )
+            .first()
+        )
+        if template is None:
+            logger.warning("Modelo de PPT %s não é do usuário — fluxo antigo",
+                           pptx_template_id)
+            return None
+        layout = template.layout if isinstance(template.layout, dict) else {}
+        if not layout.get("slides"):
+            logger.warning("Modelo de PPT %s sem slides — fluxo antigo", template.id)
+            return None
+
+        week_label = f"W{week_number}" + (f" · {period_label}" if period_label else "")
+        destino = (
+            Path(get_settings().UPLOAD_DIR) / "reports" / f"{report.id}.pptx"
+        )
+        try:
+            plan = build_plan(
+                layout,
+                activities_to_content(activities),
+                title=report.title,
+                subtitle=f"{period_label or ''} · {user.name}".strip(" ·"),
+                week_label=week_label,
+            )
+            resultado = render_plan(template.file_path, layout, plan, destino)
+        except Exception as error:
+            # Modelo estranho ou arquivo corrompido não pode impedir o weekly:
+            # cai no gerador antigo, que não depende do arquivo do usuário.
+            logger.warning(
+                "Exportação por mutação falhou (segue pelo fluxo antigo) | %s", error
+            )
+            return None
+
+        report.content = {
+            "raw": "",
+            "structured": {},
+            "ai_degraded": False,
+            "layout": layout,
+            "source": "pptx_mutate",
+            "pptx_template_id": template.id,
+            "warnings": resultado.warnings,
+            "period": {
+                "start": None,
+                "end": None,
+            },
+            "activity_ids": [activity.id for activity in activities],
+        }
+        report.pptx_path = resultado.path
+        report.prompt_used = None
+        report.ai_summary = None
+        report.coverage = None
+        report.confidence_index = None
+        report.quality_score = None
+        report.status = WeeklyStatus.COMPLETED
+        report.generated_at = datetime.now(UTC)
+        for activity in activities:
+            activity.status = ActivityStatus.USED_IN_REPORT
+
+        # O perfil de conhecimento continua aprendendo; o de ESTILO não, porque
+        # aqui não houve montagem — o layout é o do modelo, não uma escolha.
+        from app.services.knowledge_profile import learn_from_activities
+        learn_from_activities(self.db, user.id, activities)
+
+        self.db.commit()
+        self.db.refresh(report)
+        logger.info(
+            "Weekly gerado por mutação | report_id=%s | week=%d/%d | slides=%d | avisos=%d",
+            report.id, week_number, year, resultado.slides, len(resultado.warnings),
+        )
+        return report
+
     async def generate_weekly(
         self,
         user: User,
@@ -515,6 +613,7 @@ class WeeklyService:
         timezone: str | None = None,
         layout: dict | None = None,
         layout_source: str = "manual",
+        pptx_template_id: str | None = None,
     ) -> WeeklyReport:
         if start_date and end_date and start_date > end_date:
             start_date, end_date = end_date, start_date
@@ -610,6 +709,17 @@ class WeeklyService:
                 period_label = (
                     f"{start_date.strftime('%d/%m')}–{end_date.strftime('%d/%m')}"
                 )
+
+            # Modelo é um PPT enviado pelo usuário: o deck sai MUTANDO o arquivo
+            # dele, não reconstruindo um novo. Caminho determinístico e sem LLM
+            # — a IA não decide posição (ver PLANO_EXPORTADOR_PPTX.md).
+            if pptx_template_id and get_settings().PPTX_MUTATE_EXPORT:
+                mutated = self._generate_by_mutation(
+                    report, user, activities, pptx_template_id,
+                    week_number=week_number, year=year, period_label=period_label,
+                )
+                if mutated is not None:
+                    return mutated
 
             evidence_dossier = self._build_evidence_dossier(activities, user)
             attachment_inventory = self._build_attachment_inventory(activities)

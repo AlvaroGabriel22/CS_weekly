@@ -240,6 +240,16 @@ export const REPORTS = defineMessages({
   slotTitle: { pt: 'Título da atividade', en: 'Activity title', ko: '활동 제목' },
   slotBody: { pt: 'Descrição', en: 'Description', ko: '설명' },
   slotActivityDate: { pt: 'Data da atividade', en: 'Activity date', ko: '활동 날짜' },
+  pptxPreviewTitle: {
+    pt: 'Pré-visualização do modelo',
+    en: 'Template preview',
+    ko: '템플릿 미리보기',
+  },
+  pptxPreviewHint: {
+    pt: 'O deck sai do seu arquivo .pptx: posições, fontes e cores são as do modelo. Para mudar onde cada conteúdo entra, marque os campos na aba Templates.',
+    en: 'The deck comes from your .pptx file: positions, fonts and colors are the template\u2019s. To change where each content goes, mark the fields in the Templates tab.',
+    ko: '덱은 .pptx 파일에서 생성됩니다. 위치, 글꼴, 색상은 템플릿을 따릅니다. 내용 위치를 바꾸려면 템플릿 탭에서 필드를 지정하세요.',
+  },
   slotTable: { pt: 'Tabela', en: 'Table', ko: '표' },
   slotImage: { pt: 'Imagem / evidência', en: 'Image / evidence', ko: '이미지 / 증적' },
   slotChart: { pt: 'Gráfico', en: 'Chart', ko: '차트' },

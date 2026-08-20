@@ -29,6 +29,12 @@ export interface GenerateWeeklyPayload {
   layout?: DeckLayout
   /** Origem da montagem: manual pesa mais no aprendizado do padrão pessoal. */
   layout_source?: 'manual' | 'ai'
+  /**
+   * PPT enviado pelo usuário usado como modelo. Quando presente, o backend
+   * gera MUTANDO esse arquivo: as posições são as do próprio modelo, e por
+   * isso `layout` não se aplica a este caminho.
+   */
+  pptx_template_id?: string
 }
 
 interface ActivityListResponse {

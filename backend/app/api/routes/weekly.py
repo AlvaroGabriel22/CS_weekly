@@ -54,6 +54,7 @@ async def generate_weekly(
         timezone=data.timezone,
         layout=data.layout,
         layout_source=data.layout_source,
+        pptx_template_id=data.pptx_template_id,
     )
     return _serialize_report(report, db)
 

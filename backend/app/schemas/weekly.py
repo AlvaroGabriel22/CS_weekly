@@ -43,6 +43,10 @@ class WeeklyGenerateRequest(BaseModel):
     # Origem da montagem ("manual" | "ai"): montagens manuais pesam mais no
     # aprendizado do padrão pessoal (style_learning).
     layout_source: str = "manual"
+    # PPT enviado pelo usuário (aba Templates) usado como modelo. Quando
+    # presente, o deck sai por MUTAÇÃO desse arquivo — o `layout` do editor
+    # não se aplica, porque as posições são as do próprio modelo.
+    pptx_template_id: str | None = None
 
 
 class CoverageMetrics(BaseModel):
